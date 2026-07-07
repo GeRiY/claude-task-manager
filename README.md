@@ -2,9 +2,9 @@
 
 [![npm version](https://img.shields.io/npm/v/%40mgeri1993%2Fclaude-task-manager.svg)](https://www.npmjs.com/package/@mgeri1993/claude-task-manager)
 [![npm downloads](https://img.shields.io/npm/dm/%40mgeri1993%2Fclaude-task-manager.svg)](https://www.npmjs.com/package/@mgeri1993/claude-task-manager)
-[![license](https://img.shields.io/npm/l/%40mgeri1993%2Fclaude-task-manager.svg)](LICENSE)
+[![license](https://img.shields.io/npm/l/%40mgeri1993%2Fclaude-task-manager.svg)](https://github.com/GeRiY/claude-task-manager/blob/main/LICENSE)
 
-🌐 **English** | [Magyar](README.hu.md)
+🌐 **English** | [Magyar](https://github.com/GeRiY/claude-task-manager/blob/main/README.hu.md)
 
 A standalone, dockerized, **multi-project** Kanban task manager for coordinating Claude
 Code agents (main agent + teammates). One shared browser board, a token-efficient
@@ -13,17 +13,17 @@ UI — callable from any registered project, no docker required for the CLI itse
 
 ## Screenshots
 
-![Live update: task.sh drives the board through todo → in_progress → review → done in real time](docs/screenshots/demo-live-update.gif)
+![Live update: task.sh drives the board through todo → in_progress → review → done in real time](https://raw.githubusercontent.com/GeRiY/claude-task-manager/main/docs/screenshots/demo-live-update.gif)
 
-![Walkthrough: English board, task detail, Hungarian board, task detail](docs/screenshots/demo-walkthrough.gif)
+![Walkthrough: English board, task detail, Hungarian board, task detail](https://raw.githubusercontent.com/GeRiY/claude-task-manager/main/docs/screenshots/demo-walkthrough.gif)
 
 | Kanban board (English) | Task detail (English) | Projects panel |
 |---|---|---|
-| ![Kanban board, English](docs/screenshots/demo-en-board.png) | ![Task detail modal, English](docs/screenshots/demo-en-modal.png) | ![Projects panel](docs/screenshots/demo-en-projects.png) |
+| ![Kanban board, English](https://raw.githubusercontent.com/GeRiY/claude-task-manager/main/docs/screenshots/demo-en-board.png) | ![Task detail modal, English](https://raw.githubusercontent.com/GeRiY/claude-task-manager/main/docs/screenshots/demo-en-modal.png) | ![Projects panel](https://raw.githubusercontent.com/GeRiY/claude-task-manager/main/docs/screenshots/demo-en-projects.png) |
 
 | Kanban board (Hungarian) | Task detail (Hungarian) | Context panel |
 |---|---|---|
-| ![Kanban board, Hungarian](docs/screenshots/demo-hu-board.png) | ![Task detail modal, Hungarian](docs/screenshots/demo-hu-modal.png) | ![Context panel, Hungarian](docs/screenshots/demo-hu-context.png) |
+| ![Kanban board, Hungarian](https://raw.githubusercontent.com/GeRiY/claude-task-manager/main/docs/screenshots/demo-hu-board.png) | ![Task detail modal, Hungarian](https://raw.githubusercontent.com/GeRiY/claude-task-manager/main/docs/screenshots/demo-hu-modal.png) | ![Context panel, Hungarian](https://raw.githubusercontent.com/GeRiY/claude-task-manager/main/docs/screenshots/demo-hu-context.png) |
 
 ## Install
 

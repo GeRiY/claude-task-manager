@@ -5,6 +5,15 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.4] - 2026-07-07
+
+### Fixed
+- README: npm's registry serves the README verbatim (it does not rewrite relative links
+  the way GitHub does), so the screenshot/GIF images, the `README.hu.md`/`README.md`
+  cross-link, and the `LICENSE` badge link all rendered broken on npmjs.com. Switched them
+  to absolute `raw.githubusercontent.com` / `github.com` URLs, which render correctly on
+  both GitHub and npm.
+
 ## [1.0.3] - 2026-07-07
 
 ### Added
@@ -47,6 +56,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Update-check notice (`engine/check-update.sh`) on all admin-facing scripts.
 - Published to npm as `claude-task-manager`.
 
+[1.0.4]: https://github.com/GeRiY/claude-task-manager/releases/tag/v1.0.4
 [1.0.3]: https://github.com/GeRiY/claude-task-manager/releases/tag/v1.0.3
 [1.0.2]: https://github.com/GeRiY/claude-task-manager/releases/tag/v1.0.2
 [1.0.1]: https://github.com/GeRiY/claude-task-manager/releases/tag/v1.0.1

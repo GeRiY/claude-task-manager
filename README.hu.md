@@ -2,9 +2,9 @@
 
 [![npm version](https://img.shields.io/npm/v/%40mgeri1993%2Fclaude-task-manager.svg)](https://www.npmjs.com/package/@mgeri1993/claude-task-manager)
 [![npm downloads](https://img.shields.io/npm/dm/%40mgeri1993%2Fclaude-task-manager.svg)](https://www.npmjs.com/package/@mgeri1993/claude-task-manager)
-[![license](https://img.shields.io/npm/l/%40mgeri1993%2Fclaude-task-manager.svg)](LICENSE)
+[![license](https://img.shields.io/npm/l/%40mgeri1993%2Fclaude-task-manager.svg)](https://github.com/GeRiY/claude-task-manager/blob/main/LICENSE)
 
-🌐 [English](README.md) | **Magyar**
+🌐 [English](https://github.com/GeRiY/claude-task-manager/blob/main/README.md) | **Magyar**
 
 Önálló, dockerizált, **több projektet** kiszolgáló Kanban task-manager Claude Code
 agentek (fő agent + teammate-ek) koordinálásához. Egy közös böngészős board, egy
@@ -13,17 +13,17 @@ token-hatékony, `--as <agent>`-alapú `task.sh` CLI, modul-szűrés, és kétny
 
 ## Képernyőképek
 
-![Élő frissítés: a task.sh valós időben vezeti végig a board-ot todo → in_progress → review → done állapotokon](docs/screenshots/demo-live-update.gif)
+![Élő frissítés: a task.sh valós időben vezeti végig a board-ot todo → in_progress → review → done állapotokon](https://raw.githubusercontent.com/GeRiY/claude-task-manager/main/docs/screenshots/demo-live-update.gif)
 
-![Bemutató: angol board, task-részlet, magyar board, task-részlet](docs/screenshots/demo-walkthrough.gif)
+![Bemutató: angol board, task-részlet, magyar board, task-részlet](https://raw.githubusercontent.com/GeRiY/claude-task-manager/main/docs/screenshots/demo-walkthrough.gif)
 
 | Kanban board (angol) | Task-részlet (angol) | Projektek panel |
 |---|---|---|
-| ![Kanban board, angol](docs/screenshots/demo-en-board.png) | ![Task-részlet modal, angol](docs/screenshots/demo-en-modal.png) | ![Projektek panel](docs/screenshots/demo-en-projects.png) |
+| ![Kanban board, angol](https://raw.githubusercontent.com/GeRiY/claude-task-manager/main/docs/screenshots/demo-en-board.png) | ![Task-részlet modal, angol](https://raw.githubusercontent.com/GeRiY/claude-task-manager/main/docs/screenshots/demo-en-modal.png) | ![Projektek panel](https://raw.githubusercontent.com/GeRiY/claude-task-manager/main/docs/screenshots/demo-en-projects.png) |
 
 | Kanban board (magyar) | Task-részlet (magyar) | Kontextus panel |
 |---|---|---|
-| ![Kanban board, magyar](docs/screenshots/demo-hu-board.png) | ![Task-részlet modal, magyar](docs/screenshots/demo-hu-modal.png) | ![Kontextus panel, magyar](docs/screenshots/demo-hu-context.png) |
+| ![Kanban board, magyar](https://raw.githubusercontent.com/GeRiY/claude-task-manager/main/docs/screenshots/demo-hu-board.png) | ![Task-részlet modal, magyar](https://raw.githubusercontent.com/GeRiY/claude-task-manager/main/docs/screenshots/demo-hu-modal.png) | ![Kontextus panel, magyar](https://raw.githubusercontent.com/GeRiY/claude-task-manager/main/docs/screenshots/demo-hu-context.png) |
 
 ## Telepítés
 
