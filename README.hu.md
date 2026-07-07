@@ -25,6 +25,12 @@ cd claude-task-manager
 cp .env.example .env        # alap: board a 3333-as porton, autostart nélkül
 ```
 
+Vagy, ha klónozás nélkül csak a `ctm` parancs kell:
+
+```bash
+npm install -g @mgeri1993/claude-task-manager
+```
+
 Ennyi — nincs build-lépés. Ezután jellemzően két dolgot csinálsz:
 
 1. **Board indítása** (opcionális, csak a böngészős UI-hoz kell):

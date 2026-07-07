@@ -25,6 +25,12 @@ cd claude-task-manager
 cp .env.example .env        # default: board on port 3333, no autostart
 ```
 
+Or, if you just want the `ctm` command without cloning:
+
+```bash
+npm install -g @mgeri1993/claude-task-manager
+```
+
 That's it — there's no build step. Two things you'll typically do next:
 
 1. **Start the board** (optional, only needed for the browser UI):
