@@ -1,5 +1,9 @@
 # claude-task-manager
 
+[![npm version](https://img.shields.io/npm/v/%40mgeri1993%2Fclaude-task-manager.svg)](https://www.npmjs.com/package/@mgeri1993/claude-task-manager)
+[![npm downloads](https://img.shields.io/npm/dm/%40mgeri1993%2Fclaude-task-manager.svg)](https://www.npmjs.com/package/@mgeri1993/claude-task-manager)
+[![license](https://img.shields.io/npm/l/%40mgeri1993%2Fclaude-task-manager.svg)](LICENSE)
+
 🌐 **English** | [Magyar](README.hu.md)
 
 A standalone, dockerized, **multi-project** Kanban task manager for coordinating Claude
