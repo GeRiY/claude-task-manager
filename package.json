@@ -1,6 +1,6 @@
 {
   "name": "@mgeri1993/claude-task-manager",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Standalone, dockerized, multi-project Kanban task manager and CLI for coordinating Claude Code AI agents (main agent + teammates) across projects — bilingual board, task.sh, and per-project agent wrappers.",
   "publishConfig": {
     "access": "public"
