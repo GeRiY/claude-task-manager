@@ -13,9 +13,15 @@ token-hatékony, `--as <agent>`-alapú `task.sh` CLI, modul-szűrés, és kétny
 
 ## Képernyőképek
 
-| Kanban board (angol) | Task-részlet modal | Kanban board (magyar) |
+![Bemutató: angol board, task-részlet, magyar board, task-részlet](docs/screenshots/demo-walkthrough.gif)
+
+| Kanban board (angol) | Task-részlet (angol) | Projektek panel |
 |---|---|---|
-| ![Kanban board, angol](docs/screenshots/board-kanban-en.png) | ![Task-részlet modal](docs/screenshots/board-modal-en.png) | ![Kanban board, magyar](docs/screenshots/board-kanban-hu.png) |
+| ![Kanban board, angol](docs/screenshots/demo-en-board.png) | ![Task-részlet modal, angol](docs/screenshots/demo-en-modal.png) | ![Projektek panel](docs/screenshots/demo-en-projects.png) |
+
+| Kanban board (magyar) | Task-részlet (magyar) | Kontextus panel |
+|---|---|---|
+| ![Kanban board, magyar](docs/screenshots/demo-hu-board.png) | ![Task-részlet modal, magyar](docs/screenshots/demo-hu-modal.png) | ![Kontextus panel, magyar](docs/screenshots/demo-hu-context.png) |
 
 ## Telepítés
 

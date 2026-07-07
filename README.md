@@ -13,9 +13,15 @@ UI — callable from any registered project, no docker required for the CLI itse
 
 ## Screenshots
 
-| Kanban board (English) | Task detail modal | Kanban board (Hungarian) |
+![Walkthrough: English board, task detail, Hungarian board, task detail](docs/screenshots/demo-walkthrough.gif)
+
+| Kanban board (English) | Task detail (English) | Projects panel |
 |---|---|---|
-| ![Kanban board, English](docs/screenshots/board-kanban-en.png) | ![Task detail modal](docs/screenshots/board-modal-en.png) | ![Kanban board, Hungarian](docs/screenshots/board-kanban-hu.png) |
+| ![Kanban board, English](docs/screenshots/demo-en-board.png) | ![Task detail modal, English](docs/screenshots/demo-en-modal.png) | ![Projects panel](docs/screenshots/demo-en-projects.png) |
+
+| Kanban board (Hungarian) | Task detail (Hungarian) | Context panel |
+|---|---|---|
+| ![Kanban board, Hungarian](docs/screenshots/demo-hu-board.png) | ![Task detail modal, Hungarian](docs/screenshots/demo-hu-modal.png) | ![Context panel, Hungarian](docs/screenshots/demo-hu-context.png) |
 
 ## Install
 
