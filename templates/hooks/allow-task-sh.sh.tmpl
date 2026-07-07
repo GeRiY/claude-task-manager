@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+#
+# PreToolUse (Bash) hook — automatically allows task-manager task.sh calls, even inside a
+# compound command (cd ... && .../task.sh ..., redirects), so it never triggers a
+# permission prompt. The plain `Bash(...task.sh:*)` allowlist pattern doesn't match compound
+# commands (the matcher inspects each segment separately) — this hook handles that case.
+#
+# SAFETY: we only auto-allow if the command consists ENTIRELY of task.sh call(s) and optional
+# `cd ...` segments. If any other command is present (e.g. `rm -rf && .../task.sh ...`), we
+# do NOT decide — normal permission prompting still applies.
+#
+# Output: on allow, a PreToolUse permissionDecision:"allow" JSON; otherwise nothing (exit 0)
+# => normal flow.
+
+set -euo pipefail
+
+TASK_SH_MARKER=".claude/skills/task-manager/task.sh"
+
+input="$(cat)"
+cmd="$(printf '%s' "$input" | jq -r '.tool_input.command // ""')"
+
+# Fast bail-out: if the marker isn't present, don't weigh in.
+[[ "$cmd" == *"$TASK_SH_MARKER"* ]] || exit 0
+
+# Strip quoted spans (to Q) so operators inside arguments (e.g. `task.sh note x "a && b | c"`)
+# don't break segmentation. task.sh is always called bare, unquoted, with an absolute path,
+# so the marker survives in the dequoted form too.
+dequoted="$(printf '%s' "$cmd" | sed -E "s/'[^']*'/Q/g; s/\"[^\"]*\"/Q/g")"
+
+# Split into segments along && || ; | (|| first, so no orphan | is left).
+segs="${dequoted//&&/$'\n'}"
+segs="${segs//||/$'\n'}"
+segs="${segs//;/$'\n'}"
+segs="${segs//|/$'\n'}"
+
+has_task=0
+while IFS= read -r seg; do
+  # trim leading/trailing whitespace
+  seg="${seg#"${seg%%[![:space:]]*}"}"
+  seg="${seg%"${seg##*[![:space:]]}"}"
+  [[ -z "$seg" ]] && continue
+
+  # a `cd ...` segment is allowed (for setting the working directory)
+  if [[ "$seg" == cd || "$seg" == cd\ * ]]; then
+    continue
+  fi
+  # a task.sh call is allowed (including with redirects, since the marker is present)
+  if [[ "$seg" == *"$TASK_SH_MARKER"* ]]; then
+    has_task=1
+    continue
+  fi
+  # anything else -> don't decide, normal permission prompting stays
+  exit 0
+done <<< "$segs"
+
+if [[ "$has_task" == 1 ]]; then
+  printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"allow","permissionDecisionReason":"task-manager task.sh auto-allowed"}}\n'
+fi
+exit 0

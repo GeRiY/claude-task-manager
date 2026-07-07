@@ -1,14 +1,14 @@
 /**
- * ProjectStore — a data/projects.json (regisztrált projektek) egyszeri betöltése és
- * cache-elése. A regisztráció maga a host gépen, `engine/projects.sh add`-dal történik;
- * a board csak MEGJELENÍTI a már regisztrált projekteket (Forrás-választó + wrapper-másolás).
+ * ProjectStore — a one-shot load and cache of data/projects.json (registered projects).
+ * Registration itself happens on the host, via `engine/projects.sh add`; the board only
+ * DISPLAYS the already-registered projects (Source selector + wrapper copying).
  */
 export class ProjectStore {
   constructor() {
     this.projects = [];
   }
 
-  /** Betölti a data/projects.json-t. Hibán/hiányon üres listát ad (a board ezt jelzi). */
+  /** Loads data/projects.json. Returns an empty list on error/absence (the board reports this). */
   async load() {
     try {
       const res = await fetch("data/projects.json", { cache: "no-store" });

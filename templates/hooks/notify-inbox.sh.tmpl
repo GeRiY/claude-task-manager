@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+#
+# PostToolUse (Bash) hook — agent notification via the task-manager inbox.
+#
+# Whenever any agent (main OR a teammate) runs a task.sh command, this hook runs
+# AFTERWARDS, reads the caller agent's name from the command's `--as <name>` flag, and uses
+# `task.sh inbox <name>` to fetch NEW events generated since that agent's cursor (other
+# agents' status changes, notes/assignments addressed to it). If there's anything, it's
+# returned as `additionalContext` to the CALLING agent — so it learns about others'
+# activity, without the hook writing into any other agent's session.
+#
+# KEY POINT: the caller's identity is NOT determined from the session (in job mode a
+# subagent lands in the main session transcript, indistinguishable), but from the COMMAND
+# TEXT itself (the --as flag). Session-independent, reliable.
+#
+# SILENT when there's nothing new: in that case it writes nothing (exit 0), so there's no
+# unnecessary additionalContext. It only injects when there's something to give.
+
+set -euo pipefail
+
+MARKER=".claude/skills/task-manager/task.sh"
+PROJECT_DIR="${CLAUDE_PROJECT_DIR:-__TARGET_DIR__}"
+TASK_SH="$PROJECT_DIR/$MARKER"
+
+input="$(cat)"
+cmd="$(printf '%s' "$input" | jq -r '.tool_input.command // ""' 2>/dev/null || echo "")"
+
+# Only react to task.sh calls.
+[[ "$cmd" == *"$MARKER"* ]] || exit 0
+# Don't process our own inbox lookup (the hook itself calls it) — avoids an infinite loop/noise.
+[[ "$cmd" == *"task.sh inbox"* || "$cmd" == *"/task.sh inbox "* ]] && exit 0
+
+# Read the caller agent from the --as flag (--as X or --as=X). Fallback: main.
+actor="$(printf '%s' "$cmd" | sed -nE 's/.*--as[[:space:]=]+([A-Za-z0-9_.-]+).*/\1/p' | head -1)"
+[[ -n "$actor" ]] || actor="main"
+
+# task.sh must exist; if not, exit silently (don't break the flow).
+[[ -x "$TASK_SH" || -f "$TASK_SH" ]] || exit 0
+
+inbox="$(bash "$TASK_SH" inbox "$actor" 2>/dev/null || true)"
+
+# NO new event -> silent (no additionalContext).
+[[ -n "$inbox" ]] || exit 0
+
+# There's something to give -> additionalContext for the CALLING agent.
+ctx="📬 Update from the shared task board (for you: $actor) — other agents' activity:
+$inbox
+
+(This was injected by the task-manager inbox; act on it if it's relevant to your current work.)"
+
+jq -cn --arg c "$ctx" \
+  '{hookSpecificOutput:{hookEventName:"PostToolUse", additionalContext:$c}}'
+exit 0

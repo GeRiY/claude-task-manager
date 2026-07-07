@@ -1,7 +1,9 @@
-// Oszlop-definíciók és a hozzájuk tartozó CSS custom property színek.
-// A JS ezeket inline style="background:var(--todo)" formában használja a
-// kártyákon/pilleken (ld. BoardView.js, TaskModal.js) — a --todo/--in_progress/...
-// tokenek a style.css :root-jában vannak definiálva.
+import { I18n } from "./i18n.js";
+
+// Column definitions and their CSS custom-property colors.
+// The JS uses these inline as style="background:var(--todo)" on cards/pills (see
+// BoardView.js, TaskModal.js) — the --todo/--in_progress/... tokens are defined in
+// style.css's :root.
 export const COLUMNS = [
   { key: "todo", label: "To do", color: "var(--todo)" },
   { key: "in_progress", label: "In progress", color: "var(--in_progress)" },
@@ -11,9 +13,9 @@ export const COLUMNS = [
 ];
 export const COLOR = Object.fromEntries(COLUMNS.map(c => [c.key, c.color]));
 
-// Inline SVG-ikonok (a „Redesign a dark mode" mockupból). currentColor-t örökölnek,
-// így a szülő szövegszínét veszik fel. A statikus fejléc-ikonok a board.html-ben,
-// ezek a JS-generált markuphoz (stat-sáv, kártyák, folyam, lane) kellenek.
+// Inline SVG icons (from the "Redesign a dark mode" mockup). Inherit currentColor, so they
+// take on the parent's text color. The static header icons live in index.html; these are
+// for JS-generated markup (stats bar, cards, feed, lanes).
 export const ICONS = {
   clock: '<svg class="ico" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"></circle><path d="M12 7.5V12l3 2"></path></svg>',
   activity: '<svg class="ico" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h4l2.5-6 4 12 2.5-6H21"></path></svg>',
@@ -28,14 +30,15 @@ export const ICONS = {
   chevron: '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"></path></svg>',
 };
 
-// Melyik státusz-pillen kell sötét (nem fehér) szöveg a kontraszt miatt.
+// Which status pill needs dark (not white) text for contrast.
 const DARK_PILL_STATUSES = new Set(["review", "done"]);
 
-// Ágens-avatar paletta (a "Redesign a dark mode" mockup agent-színeiből) — stabil,
-// hash alapú kiosztás, hogy minden agent-id mindig ugyanazt a színt kapja.
+// Agent-avatar palette (from the "Redesign a dark mode" mockup's agent colors) — stable,
+// hash-based assignment, so every agent id always gets the same color. Reused for module
+// badges too (any string hashes to a stable color, not just agent ids).
 const AGENT_PALETTE = ["#5b8def", "#46c07f", "#d99a3f", "#b57cf6", "#45b5c4", "#e2739b", "#e0894e", "#2dd4bf", "#8b8ff0"];
 
-/** Általános segédfüggvények (statikus osztály-metódusok formájában). */
+/** General helper functions (as static class methods). */
 export class Utils {
   static esc(s) {
     return String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -45,7 +48,7 @@ export class Utils {
     return !notes ? [] : (Array.isArray(notes) ? notes.map(n => typeof n === "string" ? n : (n && (n.text || n.note)) || "").filter(Boolean) : [String(notes)]);
   }
 
-  /** Mint a norm(), de megtartja az időbélyeget: [{ at, text }, ...] (üres szöveg kihagyva). */
+  /** Like norm(), but keeps the timestamp: [{ at, text }, ...] (empty text dropped). */
   static normDetailed(notes) {
     if (!Array.isArray(notes)) return Utils.norm(notes).map(text => ({ at: null, text }));
     return notes
@@ -54,9 +57,9 @@ export class Utils {
   }
 
   /**
-   * Jegyzet-típus a prefix-konvencióból (KUTATÁS/TERV/DÖNTÉS/IMPLEMENTÁCIÓ…):
-   * a szöveg elején álló CSUPA NAGYBETŰS szó(ka)t olvassa ki egy `:` vagy `.` előtt
-   * (opcionális `(...)` közbeékeléssel). { label, cls } vagy null, ha nincs prefix.
+   * Note "kind" from the prefix convention (RESEARCH/PLAN/DECISION/IMPLEMENTATION…): reads
+   * the ALL-CAPS word(s) at the start of the text, before a `:` or `.` (optionally followed
+   * by a `(...)` aside). Returns { label, cls } or null if there's no such prefix.
    */
   static noteKind(text) {
     const m = /^\s*([A-ZÁÉÍÓÖŐÚÜŰ][A-ZÁÉÍÓÖŐÚÜŰ ]{1,24}?)(?:\s*\([^)]*\))?\s*[:.]/.exec(text || "");
@@ -64,10 +67,10 @@ export class Utils {
     const label = m[1].trim();
     const w = label.split(/\s+/)[0].toLowerCase();
     let cls = "k-other";
-    if (w.startsWith("kutat")) cls = "k-research";
-    else if (w.startsWith("terv")) cls = "k-plan";
-    else if (w.startsWith("dönt") || w.startsWith("dont")) cls = "k-decision";
-    else if (w.startsWith("impl") || w.startsWith("javít") || w.startsWith("javit")) cls = "k-impl";
+    if (w.startsWith("kutat") || w.startsWith("research")) cls = "k-research";
+    else if (w.startsWith("terv") || w.startsWith("plan")) cls = "k-plan";
+    else if (w.startsWith("dönt") || w.startsWith("dont") || w.startsWith("decision")) cls = "k-decision";
+    else if (w.startsWith("impl") || w.startsWith("javít") || w.startsWith("javit") || w.startsWith("fix")) cls = "k-impl";
     return { label, cls };
   }
 
@@ -75,14 +78,15 @@ export class Utils {
     return t.assignedAgentId || "—";
   }
 
-  /** Stabil (hash alapú) avatar-szín egy agent-idhez; "—" (nincs gazda) mindig szürke. */
+  /** Stable (hash-based) avatar color for an agent id (or any string, e.g. a module name);
+   *  "—" (no owner) is always gray. */
   static agentColor(id) {
     if (!id || id === "—") return "#7f8794";
     let h = 0; for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
     return AGENT_PALETTE[h % AGENT_PALETTE.length];
   }
 
-  /** 2 karakteres rövidítés az agent-avatarhoz (pl. "dev-organizer-fe" → "of"). */
+  /** 2-character abbreviation for the agent avatar (e.g. "dev-organizer-fe" → "of"). */
   static agentShort(id) {
     if (!id || id === "—") return "—";
     const parts = id.split(/[-_ ]+/).filter(Boolean);
@@ -90,7 +94,7 @@ export class Utils {
     return id.slice(0, 2).toLowerCase();
   }
 
-  /** #rrggbb → rgba(...) adott alfával (a mockup hexA segédfüggvénye). */
+  /** #rrggbb → rgba(...) with the given alpha (the mockup's hexA helper). */
   static hexA(hex, a) {
     const n = parseInt(String(hex).replace("#", ""), 16);
     return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
@@ -98,22 +102,25 @@ export class Utils {
 
   static absTime(iso) {
     const d = new Date(iso);
-    return isNaN(d) ? (iso || "–") : d.toLocaleString("hu-HU", { year: "2-digit", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
+    return isNaN(d) ? (iso || "–") : d.toLocaleString(I18n.locale(), { year: "2-digit", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
   }
 
   static relTime(iso) {
     const d = new Date(iso); if (isNaN(d)) return "";
     let s = Math.round((Date.now() - d.getTime()) / 1000); const fut = s < 0; s = Math.abs(s);
-    if (s < 60) return fut ? "hamarosan" : "most";
-    for (const [sec, lab] of [[31557600, "éve"], [2629800, "hónapja"], [604800, "hete"], [86400, "napja"], [3600, "órája"], [60, "perce"]])
-      if (s >= sec) return (fut ? "~" : "") + Math.floor(s / sec) + " " + lab;
-    return "most";
+    if (s < 60) return I18n.t(fut ? "time.soon" : "time.now");
+    for (const [sec, key] of [[31557600, "time.years"], [2629800, "time.months"], [604800, "time.weeks"], [86400, "time.days"], [3600, "time.hours"], [60, "time.minutes"]])
+      if (s >= sec) return (fut ? "~" : "") + Math.floor(s / sec) + " " + I18n.t(key);
+    return I18n.t("time.now");
   }
 
   static dur(ms) {
-    if (ms == null) return "–";
+    if (ms == null) return I18n.t("dur.none");
     const s = Math.round(ms / 1000), d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600), m = Math.floor(s % 3600 / 60);
-    if (d) return `${d}n ${h}ó`; if (h) return `${h}ó ${m}p`; if (m) return `${m}p`; return `${s}mp`;
+    if (d) return I18n.t("dur.days", { d, h });
+    if (h) return I18n.t("dur.hours", { h, m });
+    if (m) return I18n.t("dur.minutes", { m });
+    return I18n.t("dur.seconds", { s });
   }
 
   static parseTeam(t) {
@@ -121,19 +128,19 @@ export class Utils {
     return m ? +m[1] : null;
   }
 
-  // Függőség parse a jegyzetekből: "Blokkolva ... #N ... lezárásáig", "feloldva"
+  // Dependency parsing from notes: "Blocked ... #N ... until closed", "resolved"/"feloldva".
   static parseDeps(t) {
     const notes = Utils.norm(t.notes); const blockedBy = new Set(); let resolved = false;
     for (const n of notes) {
-      if (/feloldva/i.test(n)) resolved = true;
-      const i = n.search(/blokkolva/i);
+      if (/feloldva|resolved/i.test(n)) resolved = true;
+      const i = n.search(/blokkolva|blocked/i);
       if (i >= 0) { const seg = n.slice(i); let m; const re = /#(\d+)/g; while ((m = re.exec(seg))) blockedBy.add(+m[1]); }
     }
     const active = blockedBy.size > 0 && !resolved && (t.status === "todo" || t.status === "blocked");
     return { blockedBy: [...blockedBy], resolved, active };
   }
 
-  // Ciklusidő a history-ból
+  // Lead time from the history.
   static cycle(t) {
     const h = (t.history || []).slice().sort((a, b) => new Date(a.at) - new Date(b.at));
     let inProg = 0, start = null, done = null;
@@ -144,22 +151,22 @@ export class Utils {
       else if (e.fromStatus === "in_progress" && start) { inProg += at - start; start = null; }
       if (e.toStatus === "done") done = at;
     }
-    if (start && !done) inProg += Date.now() - start;   // még folyamatban
+    if (start && !done) inProg += Date.now() - start;   // still in progress
     return { inProgressMs: inProg, leadMs: (created && done) ? (done - created) : null, done: !!done };
   }
 
-  /** CSS osztály-toldalék a .pill elemekhez a WCAG kontraszt miatt (üres vagy " pill-dark"). */
+  /** CSS class suffix for .pill elements, for WCAG contrast (empty or " pill-dark"). */
   static pillClass(status) {
     return DARK_PILL_STATUSES.has(status) ? " pill-dark" : "";
   }
 
-  /** Eltelt idő ms-ban egy ISO időpont óta (null, ha érvénytelen). */
+  /** Elapsed time in ms since an ISO timestamp (null if invalid). */
   static ageMs(iso) {
     const d = new Date(iso);
     return isNaN(d) ? null : (Date.now() - d.getTime());
   }
 
-  /** Mikor lépett a taszk a JELENLEGI státuszába (a history utolsó ide-váltásából, különben createdAt). */
+  /** When the task entered its CURRENT status (from the last matching history entry, else createdAt). */
   static statusSince(t) {
     const h = Array.isArray(t.history) ? t.history.slice().sort((a, b) => new Date(a.at) - new Date(b.at)) : [];
     let since = t.createdAt || (h[0] && h[0].at) || null;
@@ -167,7 +174,7 @@ export class Utils {
     return since;
   }
 
-  /** Várakozás-szint (review „rád vár" kor-badge eszkalációjához): fresh <1ó, warn 1–4ó, stale >4ó. */
+  /** Wait-level (for the review "awaiting you" age badge escalation): fresh <1h, warn 1–4h, stale >4h. */
   static waitLevel(ms) {
     if (ms == null) return "fresh";
     const h = ms / 3600000;
@@ -175,8 +182,8 @@ export class Utils {
   }
 
   /**
-   * Összefésült aktivitás-folyam az összes taszk jegyzeteiből + history-jából,
-   * fordított időrendben. Elem: { at, taskId, taskTitle, kind, text, from, to, type }.
+   * Merged activity feed from every task's notes + history, in reverse chronological order.
+   * Item: { at, taskId, taskTitle, kind, text, from, to, type }.
    */
   static activityFeed(tasks) {
     const items = [];

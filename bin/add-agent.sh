@@ -1,29 +1,33 @@
 #!/usr/bin/env bash
 #
-# add-agent.sh — egyedi (custom) teammate agent-definíció létrehozása egy MÁR telepített
-# (ctm init-elt) projektben.
+# add-agent.sh — create a custom teammate agent definition in an ALREADY installed
+# (ctm init-ed) project.
 #
-# Névkonvenció: a claude-task-manager alap, install.sh által telepített készlete mindig
+# Naming convention: claude-task-manager's base set, installed by install.sh, is always
 # "ctm-*" (ctm-frontend-developer / ctm-backend-developer / ctm-code-investigator) —
-# ezeket "ctm init" generálja/frissíti. Az EZZEL a scripttel létrehozott, felhasználó által
-# igény szerint bővített egyedi agentek neve mindig "tm-*" — így egy pillantásra
-# megkülönböztethető, mi az alap készlet (automatikusan frissül) és mi az egyedi,
-# kézzel szerkesztett kiegészítés ("ctm init" nem nyúl hozzájuk).
+# generated/refreshed by "ctm init". Custom agents created with THIS script, as needed by
+# the user, are always named "tm-*" — so at a glance you can tell what's the auto-refreshed
+# base set apart from a custom, hand-edited addition ("ctm init" never touches these).
 #
-# Használat (jellemzően a "ctm agent add" alparancson át hívva):
-#   /Users/mgeri1993/code/projects/claude-task-manager/bin/add-agent.sh [target-dir] <name> [leírás]
+# Usage (typically invoked via the "ctm agent add" subcommand):
+#   /Users/mgeri1993/code/projects/claude-task-manager/bin/add-agent.sh [target-dir] <name> [description]
 #
-# target-dir – alapértelmezetten a jelenlegi könyvtár git-gyökere (vagy a cwd)
-# name       – az egyedi agent neve, "tm-" előtag NÉLKÜL vagy azzal megadva — az eredmény
-#              mindig "tm-<name>" (a "ctm-" előtag foglalt, azt nem használhatod).
-# leírás     – rövid, egy mondatos szerepleírás (a generált .md description mezőjébe kerül)
+# target-dir  – defaults to the current directory's git root (or the cwd)
+# name        – the custom agent's name, WITH or WITHOUT the "tm-" prefix — the result is
+#               always "tm-<name>" (the "ctm-" prefix is reserved, you cannot use it).
+# description – a short, one-sentence role description (goes into the generated .md's
+#               description field)
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-die() { echo "hiba: $*" >&2; exit 1; }
+die() { echo "error: $*" >&2; exit 1; }
+
+# shellcheck source=engine/check-update.sh
+source "$ROOT_DIR/engine/check-update.sh"
+check_for_updates "$ROOT_DIR"
 
 TARGET_ARG="${1:-}"
 if [[ -n "$TARGET_ARG" && -d "$TARGET_ARG" ]]; then
@@ -36,29 +40,30 @@ else
 fi
 
 RAW_NAME="${1:-}"
-[[ -n "$RAW_NAME" ]] || die "használat: add-agent.sh [target-dir] <name> [leírás]"
+[[ -n "$RAW_NAME" ]] || die "usage: add-agent.sh [target-dir] <name> [description]"
 shift || true
-DESCRIPTION="${*:-Egyedi, projekt-specifikus teammate.}"
+DESCRIPTION="${*:-Custom, project-specific teammate.}"
 
 SKILL_DIR="$TARGET_DIR/.claude/skills/task-manager"
 TASK_SH="$SKILL_DIR/task.sh"
-[[ -x "$TASK_SH" ]] || die "ez a projekt nincs telepítve — futtasd először: ctm init (itt: $TARGET_DIR)"
+[[ -x "$TASK_SH" ]] || die "this project is not installed — run first: ctm init (here: $TARGET_DIR)"
 
-# Név normalizálása: mindig "tm-" előtaggal; a "ctm-" előtag foglalt (az alap készleté).
+# Normalize the name: always with a "tm-" prefix; "ctm-" is reserved (the base set's prefix).
 SHORT="${RAW_NAME#tm-}"
-[[ "$SHORT" == ctm-* || "$SHORT" == ctm ]] && die 'a "ctm-" előtag foglalt (az alap agenteké) — válassz más nevet'
-[[ "$SHORT" =~ ^[A-Za-z0-9_-]+$ ]] || die "érvénytelen név (csak A-Za-z0-9_- engedett): $RAW_NAME"
+[[ "$SHORT" == ctm-* || "$SHORT" == ctm ]] && die 'the "ctm-" prefix is reserved (for the base agents) — choose a different name'
+[[ "$SHORT" =~ ^[A-Za-z0-9_-]+$ ]] || die "invalid name (only A-Za-z0-9_- allowed): $RAW_NAME"
 AGENT_NAME="tm-$SHORT"
 
-# A projekt-címke a már telepített SKILL.md "# Task Manager (Címke)" fejlécéből (pontosabb,
-# mint a mappanév, ha a "ctm init" egyedi címkét kapott); ha nincs ilyen sor, a mappanévre esik.
+# The project label, from the already-installed SKILL.md's "# Task Manager (Label)" heading
+# (more accurate than the folder name, if "ctm init" was given a custom label); falls back
+# to the folder name if there's no such line.
 LABEL="$(sed -n 's/^# Task Manager (\(.*\))$/\1/p' "$SKILL_DIR/SKILL.md" 2>/dev/null | head -1)"
 LABEL="${LABEL:-$(basename "$TARGET_DIR")}"
 
 AGENTS_DIR="$TARGET_DIR/.claude/agents"
 mkdir -p "$AGENTS_DIR"
 OUT="$AGENTS_DIR/$AGENT_NAME.md"
-[[ -e "$OUT" ]] && die "már létezik: $OUT (töröld kézzel, ha újra akarod generálni)"
+[[ -e "$OUT" ]] && die "already exists: $OUT (delete it by hand if you want to regenerate it)"
 
 sed \
   -e "s#__AGENT_NAME__#$AGENT_NAME#g" \
@@ -68,5 +73,5 @@ sed \
   -e "s#__TASK_SH_PATH__#$TASK_SH#g" \
   "$ROOT_DIR/templates/tm-custom.md.tmpl" > "$OUT"
 
-echo "létrehozva: $OUT"
-echo "(--as/assign érték: \"$SHORT\" — szerkeszd a fájlt, ha pontosítanod kell a szerepét/scope-ját)"
+echo "created: $OUT"
+echo "(--as/assign value: \"$SHORT\" — edit the file if you need to refine its role/scope)"

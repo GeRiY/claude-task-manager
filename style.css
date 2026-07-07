@@ -134,20 +134,12 @@ input#src { width: 100%; font-family: var(--mono); font-size: 12px; }
 .search-box input#q { flex: 1; min-width: 0; height: auto; border: none; background: transparent; padding: 0; color: var(--text); }
 .search-box input#q:focus-visible { outline: none; box-shadow: none; }
 
-/* Forrás: dropdown-gomb + popover panel (a mockup Forrás-menüjének stílusa; a tényleges
-   funkció egyetlen szerkeszthető útvonal marad, ld. App.js toggleSrcPanel). */
-.src-box { position: relative; flex: 1 1 260px; min-width: 160px; max-width: 360px; }
-.src-btn { width: 100%; justify-content: flex-start; gap: 8px; padding: 0 11px; background: var(--panel); border-color: var(--border-soft); }
-.src-btn:hover { background: #181c24; border-color: var(--border-strong); }
-.src-btn .lbl { color: var(--muted-2); font: 500 11px var(--font); flex: none; }
-.src-btn .src-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); flex: none; }
-.src-btn .src-path { flex: 1; min-width: 0; text-align: left; font: 500 12px var(--mono); color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.src-btn .chev { display: grid; place-items: center; color: var(--muted-2); flex: none; transition: transform .15s ease; }
-.src-btn.open .chev { transform: rotate(180deg); }
-.src-panel { position: absolute; top: calc(100% + 8px); left: 0; right: 0; z-index: 40; display: none; padding: 12px; border-radius: 12px; background: var(--panel-2); border: 1px solid var(--border-strong); box-shadow: var(--shadow-modal); }
-.src-panel.show { display: block; }
-.src-panel-lbl { display: flex; flex-direction: column; gap: 8px; font: 500 11px var(--font); color: var(--muted-2); }
-.src-panel-path { margin-top: 8px; font: 500 11px var(--mono); color: var(--muted); overflow-wrap: anywhere; }
+/* Forrás: egyetlen natív select a projektek közti váltáshoz (nincs külön gomb/popover). */
+.src-box { display: inline-flex; align-items: center; gap: 8px; flex: 1 1 260px; min-width: 160px; max-width: 360px; padding: 0 11px; height: 36px; border-radius: var(--radius-sm); background: var(--panel); border: 1px solid var(--border-soft); }
+.src-box .lbl { color: var(--muted-2); font: 500 11px var(--font); flex: none; }
+.src-box .src-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); flex: none; }
+.src-select { flex: 1; min-width: 0; height: 26px; border: none; background: transparent; padding: 0; }
+.src-select:focus-visible { outline: none; box-shadow: none; }
 
 /* --- Projektek modal (wrapper-lista + másolás) --- */
 .proj-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 11px 0; border-bottom: 1px solid var(--border-soft); }
@@ -270,6 +262,7 @@ button.agents-head:hover { background: rgba(255,255,255,.03); border: none; colo
 .badges { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 9px; }
 .badge { display: inline-flex; align-items: center; gap: 4px; line-height: 1; font: 600 10px var(--mono); letter-spacing: .04em; padding: 4px 8px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--panel-2); color: var(--muted); }
 .badge.team { background: var(--accent-solid); color: #fff; border-color: transparent; }
+.badge.module { background: transparent; }
 .badge.ch { background: var(--accent-tint-bg); color: var(--accent-tint-text); border-color: transparent; }
 .badge.dep-active { background: var(--danger-bg); color: var(--danger-text); border-color: var(--danger-border); cursor: pointer; transition: filter .12s ease; }
 .badge.dep-done { opacity: .6; text-decoration: line-through; cursor: pointer; transition: filter .12s ease, opacity .12s ease; }

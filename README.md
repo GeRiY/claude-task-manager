@@ -1,148 +1,247 @@
 # claude-task-manager
 
-Önálló, dockerizált, **több projektet** kiszolgáló Kanban task-manager Claude Code
-agentek (fő agent + teammate-ek) koordinálásához. Egy közös, böngészős board-dal és egy
-`--as <agent>`-alapú, token-hatékony `task.sh` CLI-vel — bármelyik regisztrált projektből
-hívva, docker nélkül.
+🌐 **English** | [Magyar](README.hu.md)
 
-## Architektúra dióhéjban
+A standalone, dockerized, **multi-project** Kanban task manager for coordinating Claude
+Code agents (main agent + teammates). One shared browser board, a token-efficient
+`--as <agent>`-based `task.sh` CLI, module filtering, and a bilingual (English/Hungarian)
+UI — callable from any registered project, no docker required for the CLI itself.
 
-- **`engine/task.sh`** — a tényleges Kanban-motor (jq-alapú, atomikus írás, lock, history,
-  `events.jsonl` alapú inbox-értesítés). `TM_DIR` env-változóval bármelyik projekt saját
-  adat-könyvtárára mutatható.
-- **`engine/projects.sh`** — projekt-regisztráló admin CLI: minden regisztrált projekthez
-  létrehoz egy `data/<id>/` adat-könyvtárat, és egy `wrappers/<id>.sh` wrappert, ami a
-  `TM_DIR`-t és az engine abszolút útját már **beégetve** hordozza.
-- **`data/<id>/`** — a projektek tényleges táblái (`tasks.json`, `context.json`,
-  `events.jsonl`, `.cursors/`) — ITT élnek, nem a célprojektben.
-- **`index.html` + `js/*` + `style.css`** — a böngészős board. Docker compose-szal
-  szolgálja ki egy PHP beépített szerver; a Forrás-választó a `data/projects.json`
-  regisztrált projektjei közt vált.
-- **`api/index.php`** — a board ÍRÁS-endpointja: allowlistelt `task.sh` parancsokat futtat
-  a kiválasztott projekt `TM_DIR`-jével (a böngésző sosem írja közvetlenül a JSON-t).
-- **`install.sh`** / **`bin/ctm`** — egy tetszőleges célprojektbe telepíti a
-  `.claude/skills/task-manager/` mappát (wrapper `task.sh` + `SKILL.md`) és a generikus
-  `ctm-*` teammate-agenteket, majd bővíti a célprojekt Bash-allowlistjét.
-- **`bin/add-agent.sh`** (`ctm agent add`) — egyedi, `tm-*` nevű teammate-definíció
-  létrehozása egy már telepített projektben.
+## Screenshots
 
-**Fontos:** a `task.sh`-hívásokhoz (agent-munkavégzés) **nincs szükség dockerre** — a
-wrapperek sima host-bash scriptek. Kizárólag a böngészős **board** és az **API** fut
-konténerben.
+| Kanban board (English) | Task detail modal | Kanban board (Hungarian) |
+|---|---|---|
+| ![Kanban board, English](docs/screenshots/board-kanban-en.png) | ![Task detail modal](docs/screenshots/board-modal-en.png) | ![Kanban board, Hungarian](docs/screenshots/board-kanban-hu.png) |
 
-## Gyors indulás
+## Install
 
-### 1. A `ctm` parancs regisztrálása
-
-A `ctm` parancsot bármely telepítés (`install.sh` / `ctm init`) automatikusan regisztrálja
-a PATH-on (`/usr/local/bin/ctm` vagy `~/.local/bin/ctm`, amelyik írható). Ha még sosem
-futtattál telepítést, regisztrálhatod kézzel is:
+Requirements: `git`, `bash`, `jq`, `docker` (with the `docker compose` plugin) and `php`
+are only needed if you plan to run the browser board — the `task.sh` CLI itself only
+needs `bash` + `jq`, no docker.
 
 ```bash
-ln -s /Users/mgeri1993/code/projects/claude-task-manager/bin/ctm ~/.local/bin/ctm
-# győződj meg róla, hogy a ~/.local/bin a PATH-adban van
+git clone https://github.com/GeRiY/claude-task-manager.git
+cd claude-task-manager
+cp .env.example .env        # default: board on port 3333, no autostart
 ```
 
-### 2. Board indítása (docker)
+That's it — there's no build step. Two things you'll typically do next:
+
+1. **Start the board** (optional, only needed for the browser UI):
+   ```bash
+   ./bin/ctm up               # builds the image on first run, starts on port 3333
+   # or without the ctm command yet: docker compose up -d --build
+   ```
+2. **Register the `ctm` command globally** and **install this tool into a project**, so
+   its agents can use `task.sh`:
+   ```bash
+   ln -s "$(pwd)/bin/ctm" ~/.local/bin/ctm   # make sure ~/.local/bin is on your PATH
+   cd /path/to/some/other/project
+   ctm init                                  # registers + installs into THAT project
+   ```
+   (`ctm init` also registers the `ctm` symlink automatically the first time it runs, so
+   the manual `ln -s` above is optional — only needed if you want `ctm` available before
+   installing into any project.)
+
+See [Quick start](#quick-start) below for the full command reference.
+
+## Architecture in a nutshell
+
+- **`engine/task.sh`** — the actual Kanban engine (jq-based, atomic writes, locking,
+  `events.jsonl`-based inbox notifications). Points at any project's own data directory via
+  the `TM_DIR` environment variable. Prints a stderr reminder on every run if the project's
+  preferred language (set from the board) isn't English — see [Language](#language--i18n).
+- **`engine/projects.sh`** — the project-registration admin CLI: for every registered
+  project it creates a `data/<id>/` data directory and a `wrappers/<id>.sh` wrapper that
+  already has `TM_DIR` and the engine's absolute path **baked in**.
+- **`data/<id>/`** — the projects' actual tables (`tasks.json`, `context.json`,
+  `events.jsonl`, `.cursors/`, `.board-lang`) — they live HERE, not in the target project.
+- **`index.html` + `js/*` + `style.css`** — the browser board. Served by a PHP built-in
+  server via docker compose; the Source selector switches between the projects registered
+  in `data/projects.json`.
+- **`api/index.php`** — the board's WRITE endpoint: runs allowlisted `task.sh` commands
+  with the selected project's `TM_DIR` (the browser never writes the JSON directly).
+- **`install.sh`** / **`bin/ctm`** — installs `.claude/skills/task-manager/` (wrapper
+  `task.sh` + `SKILL.md`), the generic `ctm-*` teammate agents, and the `allow-task-sh.sh` /
+  `notify-inbox.sh` hooks into an arbitrary target project, and extends its Bash allowlist.
+- **`bin/add-agent.sh`** (`ctm agent add`) — creates a custom, `tm-*`-named teammate
+  definition in an already-installed project.
+- **`engine/check-update.sh`** — sourced by the admin-facing scripts (`ctm`, `install.sh`,
+  `add-agent.sh`, `projects.sh`) to print a yellow "update available" notice — see
+  [Staying up to date](#staying-up-to-date).
+
+**Important:** `task.sh` calls (agent work) need **no docker at all** — the wrappers are
+plain host-bash scripts. Only the browser **board** and its **API** run in a container.
+
+## Quick start
+
+### 1. Register the `ctm` command
+
+Any install (`install.sh` / `ctm init`) registers `ctm` on PATH automatically
+(`/usr/local/bin/ctm` or `~/.local/bin/ctm`, whichever is writable). If you've never run an
+install yet, register it by hand:
 
 ```bash
-ctm up            # alapértelmezett port: 3333 (lásd .env: CTM_PORT)
-ctm up 4000        # más port — átírja a .env-et és újraindítja a konténert
+ln -s /path/to/claude-task-manager/bin/ctm ~/.local/bin/ctm
+# make sure ~/.local/bin is on your PATH
 ```
 
-`ctm up` **idempotens**: ha a konténer már fut ugyanazzal a konfigurációval, nem csinál
-semmit; ha nem fut, elindítja; ha a port változott, újraindítja. Ha a kért port már
-foglalt egy MÁS folyamat által, egyértelmű hibával leáll, mielőtt dockert hívna.
+### 2. Start the board (docker)
 
 ```bash
-ctm down                 # board leállítása
-ctm autostart on|off     # docker restart-policy (unless-stopped / no) — gép/docker
-                          # újraindításkor is magától elinduljon-e a board
+ctm up            # default port: 3333 (see .env: CTM_PORT)
+ctm up 4000        # a different port — rewrites .env and restarts the container
 ```
 
-A board ezután elérhető: `http://localhost:<port>/`
-
-### 3. Projekt telepítése
-
-Bármelyik projekt gyökeréből (vagy git-repóból) futtatva:
+`ctm up` is **idempotent**: if the container is already running with the same config, it
+does nothing; if it's not running, it starts it; if the port changed, it restarts it. If the
+requested port is already taken by another process, it fails with a clear message before
+ever calling docker.
 
 ```bash
-cd /path/to/valamelyik/projekt
-ctm init                          # id/label = a mappa neve
-ctm init sajat-id "Szép Név"      # explicit id/label
+ctm down                 # stop the board
+ctm autostart on|off     # docker restart-policy (unless-stopped / no) — start the board
+                          # automatically on Docker/machine restart or not
 ```
 
-Ez létrehozza:
+The board is then reachable at `http://localhost:<port>/`. The URL also accepts
+`?project=<id>&lang=<en|hu>` to deep-link directly to a project in a given language.
 
-- `<projekt>/.claude/skills/task-manager/task.sh` — a projektre szabott wrapper
-  (`TM_DIR` + az engine abszolút útja beégetve; docker NEM kell hozzá).
-- `<projekt>/.claude/skills/task-manager/SKILL.md` — Claude Code skill-dokumentáció
-  (a `task.sh`-hívási kontraktus, workflow, `context.json` stb.) — projekt-agnosztikus.
-- `<projekt>/.claude/agents/ctm-frontend-developer.md`,
-  `ctm-backend-developer.md`, `ctm-code-investigator.md` — generikus teammate-definíciók
-  (a konkrét stack-et a projekt saját dokumentációjából olvassák ki).
-- `<projekt>/.claude/settings.local.json` — bővítve a `task.sh` Bash-allowlistjével
-  (engedélykérés nélküli futtatás).
+### 3. Install into a project
 
-Újrafuttatva (`ctm init` ismét) **idempotens** — felülírja/frissíti a generált fájlokat, a
-`data/<id>/` tábla tartalmát nem érinti.
-
-### 4. Egyedi (custom) teammate hozzáadása
-
-Egy már telepített projektben, ha a 3 alap szerepkörön (frontend/backend/investigator)
-felül másra is szükséged van:
+Run from any project's root (or anywhere inside its git repo):
 
 ```bash
-cd /path/to/mar-telepitett-projekt
-ctm agent add reviewer "Kódot review-z és minőségi kaput ellenőriz."
+cd /path/to/some/project
+ctm init                          # id/label = the folder name
+ctm init my-id "Pretty Name"      # explicit id/label
+ctm init --force                  # overwrite generated files without prompting
 ```
 
-Létrehozza `.claude/agents/tm-reviewer.md`-t. **Névkonvenció:** az `install.sh`/`ctm init`
-generálta alap készlet mindig `ctm-*`, az így, kézzel hozzáadott egyedi agentek mindig
-`tm-*` — így elsőre látszik, mi az automatikusan frissülő alap és mi az egyedi kiegészítés
-(a `ctm init` a `tm-*` fájlokhoz nem nyúl).
+This creates:
 
-### 5. Projektek kezelése
+- `<project>/.claude/skills/task-manager/task.sh` — the project's own wrapper (`TM_DIR` +
+  the engine's absolute path baked in; docker NOT required).
+- `<project>/.claude/skills/task-manager/SKILL.md` — Claude Code skill documentation (the
+  `task.sh` calling contract, workflow, `context.json`, etc.) — project-agnostic.
+- `<project>/.claude/agents/ctm-frontend-developer.md`, `ctm-backend-developer.md`,
+  `ctm-code-investigator.md` — generic teammate definitions (they read the concrete stack
+  from the project's own documentation).
+- `<project>/.claude/hooks/allow-task-sh.sh` + `notify-inbox.sh`, registered in
+  `<project>/.claude/settings.json` — auto-allow `task.sh` Bash calls, and inject inbox
+  notifications into the calling agent after every `task.sh` run.
+- `<project>/.claude/settings.local.json` — extended with `task.sh`'s Bash allowlist entry
+  (no permission prompt).
+
+Re-running `ctm init` is **idempotent** — if a generated file already exists, it asks
+before overwriting (unless `--force`/`-y`, or non-interactive, where it skips and tells you
+to pass `--force`). It never touches `data/<id>/`'s table contents, and never touches your
+own `tm-*` custom agent files.
+
+### 4. Add a custom teammate
+
+In an already-installed project, when you need more than the 3 base roles
+(frontend/backend/investigator):
 
 ```bash
-ctm list                  # regisztrált projektek (id, címke, adat-könyvtár)
-ctm wrapper <id>          # egy projekt generált wrapperének kiírása (kézi másoláshoz)
+cd /path/to/installed/project
+ctm agent add reviewer "Reviews code and checks the quality gate."
 ```
 
-## `task.sh` a projektből (docker nélkül)
+Creates `.claude/agents/tm-reviewer.md`. **Naming convention:** the base set installed by
+`install.sh`/`ctm init` is always `ctm-*`; custom agents added this way are always `tm-*` —
+so at a glance you can tell the auto-refreshed base set apart from your own hand-edited
+addition (`ctm init` never touches `tm-*` files).
 
-A telepített wrapperen keresztül, a projekt saját `.claude/skills/task-manager/`-jéből:
+### 5. Manage projects
 
 ```bash
-/path/to/projekt/.claude/skills/task-manager/task.sh summary --as main
-/path/to/projekt/.claude/skills/task-manager/task.sh list todo --as main
-/path/to/projekt/.claude/skills/task-manager/task.sh add fix-1 "Bug fix" "leírás" --as main
-/path/to/projekt/.claude/skills/task-manager/task.sh status fix-1 in_progress --as main
+ctm list                  # registered projects (id, label, data directory)
+ctm wrapper <id>          # print a project's generated wrapper (for manual copying)
+ctm rm <id> [--force]     # deregister a project (data + wrapper) — asks first
 ```
 
-Teljes parancslista: `task.sh help`. A hívási kontraktust (kötelező `--as`, csupasz-hívás
-szabály, review→done átadási kör) a telepített `SKILL.md` írja le részletesen.
+## `task.sh` from a project (no docker)
 
-## Könyvtárszerkezet
+Through the installed wrapper, from the project's own `.claude/skills/task-manager/`:
+
+```bash
+/path/to/project/.claude/skills/task-manager/task.sh summary --as main
+/path/to/project/.claude/skills/task-manager/task.sh list todo --as main
+/path/to/project/.claude/skills/task-manager/task.sh list --module auth --as main
+/path/to/project/.claude/skills/task-manager/task.sh add fix-1 "Bug fix" "description" --as main
+/path/to/project/.claude/skills/task-manager/task.sh module fix-1 auth --as main
+/path/to/project/.claude/skills/task-manager/task.sh status fix-1 in_progress --as main
+```
+
+Full command list: `task.sh help`. The calling contract (required `--as`, the bare-call
+rule, the review→done handoff loop) is documented in detail in the installed `SKILL.md`.
+Tasks support an optional `module` field (free text, e.g. `auth`/`frontend`/`infra`) for
+grouping/filtering — set with `task.sh module <id> <name>`, filter with
+`task.sh list --module <name>`, and filterable on the board too.
+
+## Language / i18n
+
+The board defaults to **English**. Click the language button in the header (or add
+`?lang=hu` to the URL) to switch to **Hungarian** — the choice persists in `localStorage`
+and is reflected in the URL (`?lang=hu`), so a board link is shareable in a specific
+language.
+
+The language is **not** stored in any task or note. Every write from the board also sends
+its current UI language; `api/index.php` persists it in a small `data/<id>/.board-lang`
+file (not part of the task schema). `engine/task.sh` reads that file on every invocation
+(except `help`/`inbox`, to avoid noise) and — if it's not English — prints a reminder to
+stderr, e.g.:
+
+```
+[task-manager] Preferred language for this project: Hungarian — please reply and do the work in Hungarian.
+```
+
+This is how an agent running `task.sh` (via its Bash tool) learns which language a human
+was using on the board, without that instruction ever being written into the task data
+itself.
+
+## Staying up to date
+
+`ctm`, `install.sh`, `add-agent.sh`, and `projects.sh` each check (via a lightweight
+`git ls-remote`, not a full fetch) whether `origin`'s default branch has commits your local
+checkout doesn't have yet. If so, they print a yellow notice telling you to `git pull`; if
+you're already up to date, they print nothing. This check is **deliberately not** run by
+`engine/task.sh` itself — that script is called on every single task mutation (often many
+times per agent session), and a network round-trip on every call would add real, repeated
+latency to that hot path.
+
+## Directory structure
 
 ```
 claude-task-manager/
-  engine/task.sh, projects.sh     # a motor + projekt-admin CLI
-  bin/ctm, add-agent.sh           # a "ctm" parancssori belépési pont
-  install.sh                      # egy célprojekt telepítője (ctm init hívja)
-  templates/                      # SKILL.md / ctm-* / tm-custom sablonok (__PLACEHOLDER__-ekkel)
-  api/index.php                   # a board írás-endpointja
-  index.html, js/, style.css      # a böngészős board
-  data/<id>/                      # projektenkénti tábla (gitignore-olva)
-  wrappers/<id>.sh                # generált, projektenkénti task.sh wrapperek (gitignore-olva)
-  docker-compose.yml, Dockerfile  # a board+API konténerizálása (CTM_PORT, CTM_RESTART)
+  engine/task.sh, projects.sh, check-update.sh   # the engine + project-admin CLI + update-check
+  bin/ctm, add-agent.sh                          # the "ctm" command-line entry point
+  install.sh                                     # a target project's installer (ctm init calls it)
+  templates/                                     # SKILL.md / ctm-* / tm-custom / hooks templates (with __PLACEHOLDER__s)
+  api/index.php                                  # the board's write endpoint
+  index.html, js/, style.css                     # the browser board
+  favicon.svg, favicon.ico                       # board favicon
+  data/<id>/                                     # per-project table (gitignored)
+  wrappers/<id>.sh                               # generated, per-project task.sh wrappers (gitignored)
+  docker-compose.yml, Dockerfile                 # containerizes the board+API (CTM_PORT, CTM_RESTART)
 ```
 
-## Környezeti változók (`.env`)
+## Environment variables (`.env`)
 
-| Változó | Alap | Jelentés |
+| Variable | Default | Meaning |
 |---|---|---|
-| `CTM_PORT` | `3333` | A board portja (host loopback: `127.0.0.1:<port>`). `ctm up <port>` állítja. |
+| `CTM_PORT` | `3333` | The board's port (host loopback: `127.0.0.1:<port>`). Set by `ctm up <port>`. |
 | `CTM_RESTART` | `no` | Docker restart-policy. `ctm autostart on` → `unless-stopped`. |
 
-Lásd `.env.example`-t (a valódi `.env` gitignore-olva van, mert `ctm` írja/frissíti).
+See `.env.example` (the real `.env` is gitignored, since `ctm` writes/updates it).
+
+## Security notes
+
+- The board's docker port is bound to `127.0.0.1` only (never `0.0.0.0`) — unreachable from
+  the LAN, only from the host itself.
+- The write endpoint (`api/index.php`) only runs an explicit command allowlist (`status`,
+  `note`, `priority`, `module`, `tag`, `assign`, `dep`, `status-many`, `reopen`, `add`) —
+  destructive commands (`rm`, `restore`, `raw`, `archive`) are never exposed to the browser.
+- The `project` id in every write request is checked against `data/projects.json`'s
+  registered list — a client can never point the API at an arbitrary directory.

@@ -1,14 +1,13 @@
 #!/usr/bin/env bash
 #
-# projects.sh — projekt-regisztráló admin CLI a claude-task-manager-hez.
+# projects.sh — project-registration admin CLI for claude-task-manager.
 #
-# Minden regisztrált projekthez létrehoz egy saját adat-könyvtárat
-# (data/<id>/tasks.json stb., a meglévő task.sh init-jével) és egy abszolút
-# útvonalú, a projekt-azonosítót "beégető" wrapper scriptet
-# (wrappers/<id>.sh), amit a célprojektbe ki lehet másolni, hogy az ottani agentek TM_DIR
-# nélkül, közvetlenül hívhassák.
+# For every registered project, creates its own data directory (data/<id>/tasks.json etc.,
+# using the existing task.sh init) and an absolute-path wrapper script with the project id
+# "baked in" (wrappers/<id>.sh), which can be copied into the target project so its agents
+# can call it directly, without needing TM_DIR.
 #
-# Használat:
+# Usage:
 #   ./projects.sh add <id> <label>
 #   ./projects.sh list
 #   ./projects.sh rm <id>
@@ -25,9 +24,13 @@ ENGINE_TASK_SH="$ROOT_DIR/engine/task.sh"
 PROJECTS_FILE="$DATA_ROOT/projects.json"
 LOCK_DIR="$DATA_ROOT/.projects.lock"
 
-die() { echo "hiba: $*" >&2; exit 1; }
+# shellcheck source=engine/check-update.sh
+source "$ROOT_DIR/engine/check-update.sh"
+check_for_updates "$ROOT_DIR"
 
-command -v jq >/dev/null 2>&1 || die "jq nincs telepítve (kell a scripthez)."
+die() { echo "error: $*" >&2; exit 1; }
+
+command -v jq >/dev/null 2>&1 || die "jq is not installed (required for this script)."
 
 now_iso() { date -u +%Y-%m-%dT%H:%M:%S.000Z; }
 
@@ -35,13 +38,13 @@ is_valid_id() {
   [[ "$1" =~ ^[A-Za-z0-9_-]+$ ]]
 }
 
-# --- Konkurrencia-zár (ugyanaz a mkdir-alapú minta, mint az engine task.sh-ban) --------------
+# --- Concurrency lock (same mkdir-based pattern as the engine task.sh) --------------
 LOCK_HELD=0
 acquire_lock() {
   local waited=0 timeout=15
   while ! mkdir "$LOCK_DIR" 2>/dev/null; do
     waited=$((waited + 1))
-    [[ $waited -ge $((timeout * 20)) ]] && die "nem sikerült zárat szerezni ${timeout}s alatt: $LOCK_DIR"
+    [[ $waited -ge $((timeout * 20)) ]] && die "could not acquire lock within ${timeout}s: $LOCK_DIR"
     sleep 0.05
   done
   LOCK_HELD=1
@@ -62,7 +65,7 @@ project_exists() {
   [[ "$(jq --arg id "$id" '[.[]|select(.id==$id)]|length' "$PROJECTS_FILE")" != "0" ]]
 }
 
-# Atomikus írás a PROJECTS_FILE-ra (jq-filter, temp fájlon át).
+# Atomic write to PROJECTS_FILE (jq filter, via a temp file).
 apply_jq() {
   acquire_lock
   local tmp
@@ -72,7 +75,7 @@ apply_jq() {
   else
     rm -f "$tmp"
     release_lock
-    die "jq művelet sikertelen."
+    die "jq operation failed."
   fi
   release_lock
 }
@@ -85,8 +88,8 @@ write_wrapper() {
   mkdir -p "$WRAPPERS_DIR"
   cat > "$wpath" <<EOF
 #!/usr/bin/env bash
-# Automatikusan generálva a claude-task-manager "${label}" projektjéhez — kézzel ne szerkeszd.
-# Újragenerálás: engine/projects.sh add ${id} "${label}"  (felülírja)
+# Auto-generated for the claude-task-manager "${label}" project — do not edit by hand.
+# Regenerate with: engine/projects.sh add ${id} "${label}"  (overwrites)
 exec env TM_DIR="${dataDir}" \\
   "${ENGINE_TASK_SH}" "\$@"
 EOF
@@ -94,9 +97,9 @@ EOF
 }
 
 cmd_add() {
-  [[ $# -ge 2 ]] || die "használat: add <id> <label>"
+  [[ $# -ge 2 ]] || die "usage: add <id> <label>"
   local id="$1" label="$2"
-  is_valid_id "$id" || die "érvénytelen id (csak A-Za-z0-9_- engedett): $id"
+  is_valid_id "$id" || die "invalid id (only A-Za-z0-9_- allowed): $id"
   ensure_projects_file
   local dataDir wpath now
   dataDir="$(data_dir "$id")"
@@ -113,12 +116,12 @@ cmd_add() {
     apply_jq --arg id "$id" --arg label "$label" --arg dataDir "$dataDir" \
              --arg wpath "$wpath" --arg now "$now" \
       '(.[]|select(.id==$id)) |= (.label=$label | .dataDir=$dataDir | .wrapperPath=$wpath)'
-    echo "frissítve: $id"
+    echo "updated: $id"
   else
     apply_jq --arg id "$id" --arg label "$label" --arg dataDir "$dataDir" \
              --arg wpath "$wpath" --arg now "$now" \
       '. += [{id:$id, label:$label, dataDir:$dataDir, wrapperPath:$wpath, createdAt:$now}]'
-    echo "hozzáadva: $id -> $dataDir (wrapper: $wpath)"
+    echo "added: $id -> $dataDir (wrapper: $wpath)"
   fi
 }
 
@@ -128,21 +131,21 @@ cmd_list() {
 }
 
 cmd_rm() {
-  [[ $# -ge 1 ]] || die "használat: rm <id>"
+  [[ $# -ge 1 ]] || die "usage: rm <id>"
   local id="$1"
   ensure_projects_file
-  project_exists "$id" || die "nincs ilyen projekt: $id"
+  project_exists "$id" || die "no such project: $id"
   apply_jq --arg id "$id" '[.[]|select(.id!=$id)]'
   rm -rf "$(data_dir "$id")"
   rm -f "$(wrapper_path "$id")"
-  echo "törölve: $id (adatok és wrapper is)"
+  echo "removed: $id (data and wrapper too)"
 }
 
 cmd_wrapper() {
-  [[ $# -ge 1 ]] || die "használat: wrapper <id>"
+  [[ $# -ge 1 ]] || die "usage: wrapper <id>"
   local id="$1"
   ensure_projects_file
-  project_exists "$id" || die "nincs ilyen projekt: $id"
+  project_exists "$id" || die "no such project: $id"
   cat "$(wrapper_path "$id")"
 }
 
@@ -154,7 +157,7 @@ main() {
     list|ls) cmd_list "$@" ;;
     rm|remove) cmd_rm "$@" ;;
     wrapper) cmd_wrapper "$@" ;;
-    *) die "ismeretlen parancs: $cmd (add|list|rm|wrapper)" ;;
+    *) die "unknown command: $cmd (add|list|rm|wrapper)" ;;
   esac
 }
 

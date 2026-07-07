@@ -1,16 +1,16 @@
 import { Utils } from "./Utils.js";
 
 /**
- * tasks.json pollozás feltételes GET-tel (ETag / Last-Modified),
- * és a két poll közti diff-számítás (állapotváltozás / +jegyzet / +history / frissült / új).
+ * Polls tasks.json with conditional GET (ETag / Last-Modified), and computes the diff
+ * between two polls (status change / +note / +history / updated / new).
  */
 export class TaskStore {
   constructor(getUrl) {
-    this.getUrl = getUrl;           // () => string – a jelenlegi forrás URL-je
+    this.getUrl = getUrl;           // () => string – the current source URL
     this.etag = null;
     this.lastModified = null;
     this.currentTasks = [];
-    this.prevTasksById = new Map(); // előző poll teljes taszkjai (diffhez)
+    this.prevTasksById = new Map(); // full tasks from the previous poll (for diffing)
     this.changeInfo = new Map();    // id -> {status,notes,history,updated,isNew}
     this.renderedOnce = false;
   }
@@ -34,7 +34,7 @@ export class TaskStore {
     return Object.keys(ch).length ? ch : null;
   }
 
-  /** Egy poll ciklus. Visszaadja: { notModified } vagy { tasks, shouldRender, changeCount }. Hibán dob. */
+  /** One poll cycle. Returns { notModified } or { tasks, shouldRender, changeCount }. Throws on error. */
   async poll() {
     const url = this.getUrl();
     const headers = {};
@@ -50,7 +50,7 @@ export class TaskStore {
 
     const text = await res.text();
     let data;
-    try { data = JSON.parse(text); } catch (e) { throw new Error("Érvénytelen JSON a fájlban"); }
+    try { data = JSON.parse(text); } catch (e) { throw new Error("Invalid JSON in the file"); }
 
     const tasks = Array.isArray(data.tasks) ? data.tasks : [];
     this.changeInfo = new Map();
@@ -68,5 +68,6 @@ export class TaskStore {
     return { notModified: false, tasks, shouldRender, changeCount: this.changeInfo.size };
   }
 
+  /** Marks that at least one render has happened, so subsequent diffs are computed against it. */
   markRendered() { this.renderedOnce = true; }
 }

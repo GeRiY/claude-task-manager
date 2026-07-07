@@ -1,11 +1,11 @@
 /**
- * context.json pollozás (feltételes GET, Last-Modified alapon) — a felhasználói
- * session-kontextus (cél, fókusz, döntések, nyitott kérdések) forrása.
- * A context.json a tasks.json melletti útvonalon van (ctxUrl() vezeti le).
+ * Polls context.json (conditional GET, Last-Modified based) — the source of the user
+ * session context (goal, focus, decisions, open questions).
+ * context.json lives alongside tasks.json (derived by ctxUrl()).
  */
 export class ContextStore {
   constructor(getSrcUrl) {
-    this.getSrcUrl = getSrcUrl; // () => string – a tasks.json forrás URL-je (input#src értéke)
+    this.getSrcUrl = getSrcUrl; // () => string – the tasks.json source URL (input#src value)
     this.lastModified = null;
     this.context = null;
   }
@@ -21,7 +21,7 @@ export class ContextStore {
     return s.replace(/[^\/?#]*([?#].*)?$/, "context.json");
   }
 
-  /** A context opcionális – hibán/404-en csendben elnyeli. Visszaadja: { changed }. */
+  /** The context is optional – silently swallows errors/404. Returns { changed }. */
   async poll() {
     try {
       const headers = {}; if (this.lastModified) headers["If-Modified-Since"] = this.lastModified;
