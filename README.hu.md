@@ -13,6 +13,8 @@ token-hatékony, `--as <agent>`-alapú `task.sh` CLI, modul-szűrés, és kétny
 
 ## Képernyőképek
 
+![Élő frissítés: a task.sh valós időben vezeti végig a board-ot todo → in_progress → review → done állapotokon](docs/screenshots/demo-live-update.gif)
+
 ![Bemutató: angol board, task-részlet, magyar board, task-részlet](docs/screenshots/demo-walkthrough.gif)
 
 | Kanban board (angol) | Task-részlet (angol) | Projektek panel |

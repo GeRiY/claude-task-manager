@@ -13,6 +13,8 @@ UI — callable from any registered project, no docker required for the CLI itse
 
 ## Screenshots
 
+![Live update: task.sh drives the board through todo → in_progress → review → done in real time](docs/screenshots/demo-live-update.gif)
+
 ![Walkthrough: English board, task detail, Hungarian board, task detail](docs/screenshots/demo-walkthrough.gif)
 
 | Kanban board (English) | Task detail (English) | Projects panel |
