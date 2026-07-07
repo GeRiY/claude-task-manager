@@ -1,0 +1,46 @@
+{
+  "name": "claude-task-manager",
+  "version": "1.0.0",
+  "description": "A standalone, dockerized, multi-project Kanban task manager for coordinating Claude Code agents.",
+  "bin": {
+    "ctm": "bin/ctm"
+  },
+  "files": [
+    "bin/",
+    "engine/",
+    "api/",
+    "js/",
+    "templates/",
+    "index.html",
+    "style.css",
+    "favicon.svg",
+    "favicon.ico",
+    "install.sh",
+    "docker-compose.yml",
+    "Dockerfile",
+    ".env.example",
+    "README.md",
+    "README.hu.md"
+  ],
+  "keywords": [
+    "claude-code",
+    "kanban",
+    "task-manager",
+    "cli",
+    "agents",
+    "docker"
+  ],
+  "homepage": "https://github.com/GeRiY/claude-task-manager#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/GeRiY/claude-task-manager.git"
+  },
+  "bugs": {
+    "url": "https://github.com/GeRiY/claude-task-manager/issues"
+  },
+  "license": "MIT",
+  "os": [
+    "darwin",
+    "linux"
+  ]
+}
