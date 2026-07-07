@@ -1,0 +1,131 @@
+#!/usr/bin/env bash
+#
+# ctm — a claude-task-manager parancssori belépési pontja.
+#
+# Ez a fájl jellemzően egy PATH-on lévő könyvtárból (pl. /usr/local/bin/ctm vagy
+# ~/.local/bin/ctm) mutató SZIMLINK-ként fut — az install.sh regisztrálja automatikusan.
+# Bármelyik projekt-mappából hívható, cd/abszolút-út nélkül.
+#
+# Használat:
+#   ctm init [project-id] [label]   A JELENLEGI könyvtár (vagy git-gyökere) telepítése
+#   ctm list                        Regisztrált projektek
+#   ctm wrapper <id>                Egy projekt wrapper task.sh-jának kiírása
+#   ctm agent add <name> [leírás]   Egyedi ("tm-<name>") teammate-definíció létrehozása
+#   ctm up [port]                   Board indítása/ellenőrzése dockerrel; ha fut, csak
+#                                    reconcile-ol; ha port is meg van adva, arra állítja
+#                                    (.env-be írja) és újraindítja a konténert. Foglalt
+#                                    portnál hibát jelez, mielőtt dockert hívna.
+#   ctm down                        Board leállítása.
+#   ctm autostart on|off            A konténer automatikus indítása Docker/gép-újraindításkor
+#                                    (docker restart-policy) — beállítja és alkalmazza.
+
+set -euo pipefail
+
+# A szimlink mögötti valódi fájl könyvtárának feloldása (portábilis, macOS-en is működik —
+# a BSD readlink nem tudja a -f kapcsolót).
+SOURCE="${BASH_SOURCE[0]}"
+while [[ -L "$SOURCE" ]]; do
+  DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
+  SOURCE="$(readlink "$SOURCE")"
+  [[ "$SOURCE" != /* ]] && SOURCE="$DIR/$SOURCE"
+done
+BIN_DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
+ROOT_DIR="$(cd "$BIN_DIR/.." && pwd)"
+
+die() { echo "hiba: $*" >&2; exit 1; }
+
+# A docker-compose.yml a projekt gyökerén lévő .env CTM_PORT értékét interpolálja a
+# ports/command mezőkbe — ide írjuk a kívánt portot, ha a hívó megadott egyet.
+set_env_var() {
+  local file="$1" key="$2" value="$3" tmp
+  tmp="$(mktemp)"
+  [[ -f "$file" ]] && grep -v "^${key}=" "$file" > "$tmp" || true
+  echo "${key}=${value}" >> "$tmp"
+  mv "$tmp" "$file"
+}
+current_port() {
+  grep '^CTM_PORT=' "$ROOT_DIR/.env" 2>/dev/null | head -1 | cut -d= -f2
+}
+
+# Igaz, ha ÉPP A MI konténerünk (claude-task-manager) fut és már ezen a porton hallgat —
+# ilyenkor nincs ütközés, a docker compose úgyis csak reconcile-ol.
+our_container_already_on_port() {
+  local port="$1"
+  docker ps --filter "name=^claude-task-manager$" --format '{{.Ports}}' 2>/dev/null \
+    | grep -q "127.0.0.1:${port}->"
+}
+
+# Ha a kért port már foglalt egy MÁSIK folyamat által, egyértelmű hibával álljunk le,
+# mielőtt a docker compose-ot egyáltalán meghívnánk (annak a hibaüzenete kevésbé érthető).
+check_port_free() {
+  local port="$1"
+  our_container_already_on_port "$port" && return 0
+  if command -v lsof >/dev/null 2>&1 && lsof -nP -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1; then
+    die "a(z) $port port már foglalt (más folyamat hallgatja) — válassz másikat: ctm up <más-port>"
+  fi
+}
+
+cmd="${1:-help}"; shift || true
+
+case "$cmd" in
+  init)
+    "$ROOT_DIR/install.sh" "$(pwd)" "$@"
+    ;;
+  list|ls)
+    "$ROOT_DIR/engine/projects.sh" list
+    ;;
+  wrapper)
+    "$ROOT_DIR/engine/projects.sh" wrapper "$@"
+    ;;
+  agent)
+    sub="${1:-}"; shift || true
+    case "$sub" in
+      add) "$ROOT_DIR/bin/add-agent.sh" "$(pwd)" "$@" ;;
+      *) die "használat: ctm agent add <name> [leírás]" ;;
+    esac
+    ;;
+  up)
+    port="${1:-$(current_port)}"
+    port="${port:-3333}"
+    [[ "$port" =~ ^[0-9]+$ ]] || die "érvénytelen port: $port"
+    check_port_free "$port"
+    set_env_var "$ROOT_DIR/.env" "CTM_PORT" "$port"
+    # `docker compose up -d` önmagában is idempotens: ha nem fut a konténer, elindítja;
+    # ha fut és a konfiguráció (pl. port) változott, automatikusan újraindítja a megfelelő
+    # beállítással; ha fut és nem változott semmi, nem csinál semmit.
+    (cd "$ROOT_DIR" && docker compose up -d --build)
+    echo "board: http://localhost:$(current_port)/"
+    ;;
+  down)
+    (cd "$ROOT_DIR" && docker compose down)
+    ;;
+  autostart)
+    mode="${1:-}"
+    case "$mode" in
+      on)  set_env_var "$ROOT_DIR/.env" "CTM_RESTART" "unless-stopped" ;;
+      off) set_env_var "$ROOT_DIR/.env" "CTM_RESTART" "no" ;;
+      *) die "használat: ctm autostart on|off" ;;
+    esac
+    (cd "$ROOT_DIR" && docker compose up -d --build)
+    echo "autostart: $mode (restart-policy: $(grep '^CTM_RESTART=' "$ROOT_DIR/.env" | cut -d= -f2))"
+    ;;
+  help|-h|--help|"")
+    cat <<'EOF'
+ctm — claude-task-manager CLI
+
+  ctm init [project-id] [label]   A JELENLEGI könyvtár (vagy annak git-gyökere) regisztrálása
+                                   projektként + a .claude/skills/task-manager/ telepítése
+                                   (task.sh wrapper + SKILL.md + ctm-* agentek + allowlist).
+                                   Docker NEM kell hozzá.
+  ctm list                        Regisztrált projektek listája.
+  ctm wrapper <id>                Egy projekt generált wrapper task.sh-jának kiírása.
+  ctm agent add <name> [leírás]   Egyedi teammate-definíció létrehozása a JELENLEGI (már
+                                   "ctm init"-elt) projektben — a neve mindig "tm-<name>".
+  ctm up [port]                   Board ellenőrzése/indítása dockerrel. Ha nincs elindítva,
+                                   elindítja; ha fut, nem csinál semmit; ha portot is adsz
+                                   meg, arra állítja és — szükség esetén — újraindítja.
+  ctm down                        Board leállítása.
+EOF
+    ;;
+  *) die "ismeretlen parancs: $cmd (súgó: ctm help)" ;;
+esac

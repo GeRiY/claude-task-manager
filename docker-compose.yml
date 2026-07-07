@@ -1,0 +1,14 @@
+services:
+  task-manager:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: claude-task-manager
+    restart: ${CTM_RESTART:-no}   # "unless-stopped"-re állítva: ctm autostart on
+    ports:
+      - "127.0.0.1:${CTM_PORT:-3333}:${CTM_PORT:-3333}"   # csak a host loopbackjén, ne a LAN-on
+    volumes:
+      - .:/app
+    environment:
+      - PHP_CLI_SERVER_WORKERS=4
+    command: ["sh", "-c", "php -S 0.0.0.0:${CTM_PORT:-3333} -t /app"]

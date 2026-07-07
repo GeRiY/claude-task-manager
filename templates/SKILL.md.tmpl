@@ -1,0 +1,174 @@
+---
+name: task-manager
+description: Capture actionable user requests as persistent tasks, update task status as work progresses, and keep a shared task store in sync. Use when a user asks an agent to do work, check progress, block a task, complete a task, or manage the Kanban board.
+metadata: {"openclaw":{"skillKey":"task-manager"}}
+---
+
+# Task Manager (__PROJECT_LABEL__)
+
+Use this skill for task capture and task lifecycle updates in this project ("__PROJECT_ID__").
+
+Ezt a mappát a **claude-task-manager** telepítője (`install.sh`) generálta — a valódi
+tábla (tasks.json/context.json/events.jsonl) a claude-task-manager projekt alatt,
+`data/__PROJECT_ID__/`-ben él, NEM ebben a projektben. A `task.sh` itt egy **wrapper**,
+ami ezt az adat-könyvtárat célozza meg — a hívási minta ettől függetlenül ugyanaz marad,
+mint korábban.
+
+## Trigger
+
+```json
+{
+  "activation": {
+    "anyPhrases": [
+      "add a task",
+      "create a task",
+      "track this task",
+      "task status",
+      "mark this done",
+      "block this task",
+      "what tasks do we have"
+    ]
+  },
+  "movement": {
+    "target": "desk",
+    "skipIfAlreadyThere": true
+  }
+}
+```
+
+Also use this skill even when those exact phrases are absent if the latest user message is an actionable work request. If the user asks the agent to do something, that request must become a task before the agent proceeds.
+
+## Storage location
+
+Az authoritative store a **claude-task-manager** projekt alatt van (nem ebben a repóban):
+
+- `data/__PROJECT_ID__/tasks.json` — the Kanban board (source of truth for tasks).
+- `data/__PROJECT_ID__/context.json` — the **user context** (source of truth for the user's intent, decisions, and init prompt; see "User context" below).
+
+Innen, a projektből SOSE olvasd/írd ezeket közvetlenül — mindig a lenti `task.sh` wrapperen
+keresztül (az feloldja a helyes adat-könyvtárat).
+
+## Token-hatékony CLI (`task.sh`) — AZ EGYETLEN író
+
+A `tasks.json` kezeléséhez **ne** olvasd/írd újra a teljes fájlt (sok token). Használd a
+skill mellé csomagolt `task.sh` wrappert (jq alapú), amely tömör kimenetet ad és atomikusan
+ír (timestamp + history/notes bejegyzéseket automatikusan karbantartja). A script a Claude
+settings allowlistjén van, engedély nélkül futtatható.
+
+> **KEMÉNY SZABÁLY — a JSON-t SOHA ne szerkeszd közvetlenül, csak `task.sh`-val.** Sem a
+> `tasks.json`-t, sem a `context.json`-t **ne** módosítsd `Write`/`Edit` toollal, és ne írd
+> vissza „a teljes JSON-t" kézzel. Minden mutáció (task ÉS context) **kizárólag** a `task.sh`
+> parancsain keresztül történjen — így egyetlen atomikus író van, konzisztens timestamppel és
+> history-val, és nincs elrontott/duplikált állapot. Ez a **fő agentre és MINDEN
+> subagentre/teammate-re** vonatkozik. Olvasásra a `task.sh` lekérdező parancsai valók
+> (`summary`, `list`, `get`, `ctx` …); `Read`-et a JSON-ra csak végszükségből használj, írni
+> soha. (A `context.json`-höz a `ctx-*` parancsok valók — ld. lentebb.)
+
+Kanonikus hívási forma (TELJES abszolút úttal, bármely working directoryból):
+
+```
+__TASK_SH_PATH__ <parancs> [args] --as <agent>
+```
+
+> **KÖTELEZŐ: `--as <agent>` minden nem-meta parancsnál.** Minden `task.sh`-hívásodhoz
+> tedd hozzá a saját neved: a **fő agent `--as main`**, egy teammate a saját címkéje
+> (`--as backend-auth`). Ez íródik minden esemény `by`-jaként. `--as` nélkül a nem-meta
+> parancsok **hibát dobnak**. Kivétel (nincs `--as`): `help`, `inbox`, `init`, `validate`,
+> `restore`, `raw`.
+
+> **Engedély nélküli futtatás — hívd KÖZVETLENÜL, csupaszon.** A `task.sh`-t MINDIG a fenti
+> abszolút úttal, **önálló** parancsként hívd — `cd`, `&&`/`||`, redirect (`2>&1`) vagy
+> `$VÁLTOZÓ` nélkül. A Claude Code az összefűzött parancsokat **szegmensenként**
+> engedélyezteti, ezért egy `cd … && …task.sh …` alak promptot kérne. A script a `TM_DIR`-t
+> már saját magába beégetve hordozza (lásd `claude-task-manager/engine/projects.sh`), ezért
+> a `cd` amúgy is felesleges. A script rajta van a projekt allowlistjén
+> (`.claude/settings.local.json`, `Bash(…task.sh:*)`), ezért a csupasz abszolút hívás
+> engedélykérés nélkül fut.
+
+Leggyakoribb parancsok (mindig a TELJES abszolút úttal hívd — másold be így):
+
+- `__TASK_SH_PATH__ summary --as main` — darabszám státuszonként (a "hol tartunk" gyors áttekintés).
+- `__TASK_SH_PATH__ list [status] --as main` — tömör lista `id [status] title` formában.
+- `__TASK_SH_PATH__ get <id> --as main` — EGY task teljes JSON-je (nem a teljes fájl).
+- `__TASK_SH_PATH__ add <id> <title> [desc] --as main` — új task `todo` státusszal, az összes kötelező mezővel.
+- `__TASK_SH_PATH__ status <id> <status> [note] --as main` — státuszváltás + history bejegyzés.
+- `__TASK_SH_PATH__ note <id> <szöveg> --as main` — megjegyzés hozzáfűzése.
+- `__TASK_SH_PATH__ set <id> <mező> <json-érték> --as main` — tetszőleges mező beállítása (string idézve: `'"main"'`).
+- `__TASK_SH_PATH__ find <szöveg> --as main` — és ugyanígy: `… history <id>`, `… ids`, `… archive|unarchive|rm <id>`.
+
+**Strukturált mezők és munkafolyam-parancsok** (a title/notes szövegbe kódolás helyett):
+
+- `… priority <id> <low|normal|high|urgent>` — prioritás.
+- `… tag <id> <add|rm> <címke>` — címkék (pl. `frontend`/`backend`/`teszt`).
+- `… assign <id> <agent>` — `assignedAgentId` (claim-hez kényelmesebb, mint `set`).
+- `… dep <id> <add|rm> <másik-id>` — függőség (`dependsOn`): `id` vár `másik-id`-re; ciklus- és lét-ellenőrzéssel.
+- `… deps <id>` — mire vár ez a task és mit blokkol.
+- `… next` — a következő ajánlott `todo` (nincs nyitott függősége), prioritás szerint rendezve.
+- `… list [status] --tag <t> --agent <a> --priority <p> --all --json` — szűrt/gépi lista.
+- `… status-many <status> <id...>` — több task egy státuszra, EGY atomikus írással.
+- `… reopen <id> [status]` — lezárt/archivált task újranyitása.
+- `… validate` — séma-ellenőrzés (kötelező mezők, státusz, prioritás, törött függőség, duplikált id).
+- `… restore` — a legutóbbi pre-write backup (`tasks.json.bak`) visszaállítása.
+- `… inbox <agent>` — az `<agent>` cursorja óta keletkezett, MÁS agent által generált események (meta parancs, nincs `--as`).
+
+Teljes súgó: `__TASK_SH_PATH__ help`. A teljes JSON-t csak akkor olvasd (`… raw` / Read),
+ha a fenti parancsokkal nem oldható meg a feladat.
+
+## User context (session continuity)
+
+Beyond individual tasks, maintain a durable **user context** so that work can be resumed in a
+**fresh session** without re-interviewing the user. Store it (a `task.sh` `ctx-*`
+parancsain át) — sose `Write`/`Edit`-tel:
+
+- Session indul és a fájl hiányzik → `ctx-init "<initPrompt>" "<goal>" --as main`.
+- A user **döntést** hoz → `ctx-decision "<téma>" "<döntés>" "<indoklás>" --as main`.
+- Állandó szabály/megkötés hangzik el → `ctx-constraint "<szöveg>" --as main`.
+- Nyitott kérdés felmerül / lezárul → `ctx-question add|rm "<szöveg>" --as main`.
+- Az aktív fókusz változik → `ctx-set currentFocus '"<task-id vagy szöveg>"' --as main`.
+
+Minden session elején **először olvasd a `task.sh ctx`-t**, és hagyd, hogy irányítsa a munkát.
+
+## Required workflow
+
+Minden lépés a `task.sh`-n keresztül (soha közvetlen JSON-írás). **Minden nem-meta
+parancshoz add hozzá a `--as main`-t** (fő agentként); teammate a saját `--as <név>`-ét:
+
+1. Egy actionable kérés kezelése előtt `task.sh summary --as main` / `list … --as main`.
+2. Session induláskor `task.sh ctx --as main`; ha hiányzik, `ctx-init "<initPrompt>" "<goal>" --as main`.
+3. Ha az utolsó user-üzenet actionable és nincs rá aktív task, azonnal `task.sh add <id> "<title>" "<desc>" --as main`.
+4. Végrehajtás előtt a task legyen `todo`, vagy `task.sh status <id> in_progress --as main`.
+5. Ha a munka nem folytatható, `task.sh status <id> blocked "<ok>" --as main`.
+6. Ha kész, `task.sh status <id> done --as main`.
+7. Ha user-review/megerősítés kell, `task.sh status <id> review --as main`.
+8. A `task.sh` minden mutációt atomikusan ír és karbantartja a timestampet/history-t — a
+   teljes JSON kézi visszaírására nincs szükség és tilos.
+
+## Status rules
+
+- New actionable requests start as `todo` unless work has already begun.
+- Move to `in_progress` when the agent is actively working.
+- Move to `blocked` when progress depends on missing input, credentials, approvals, or failures.
+- Move to `review` when the work is ready for inspection or handoff.
+- Move to `done` only when the requested work is complete.
+
+## Board (megosztott, dockerizált felület)
+
+A boardot a **claude-task-manager** projekt szolgálja ki (docker compose, port 3333),
+**minden** telepített projekt közös felülete — a fejléc „Forrás" választójában válaszd ki
+ezt a projektet (**__PROJECT_LABEL__**):
+
+```
+cd /Users/mgeri1993/code/projects/claude-task-manager && docker compose up -d
+# majd: http://localhost:3333/
+```
+
+Az írás a boardról **továbbra is a `task.sh`-n megy keresztül** (megmarad az egyedüli-író
+invariáns: atomikus lock, history, `events.jsonl`, inbox) — a böngésző SOSEM írja
+közvetlenül a JSON-t. A `task.sh`-hívásokhoz (agent munkavégzés) **nincs szükség docker-re**
+— a fenti `__TASK_SH_PATH__` sima host-bash script, önmagában fut.
+
+## Kapcsolódó
+
+- Teammate-koordináció (Agent Teams / FleetView), SendMessage-alapú menet közbeni irányítás,
+  `review → main dönt (done | assign+todo)` átadási kör — ugyanaz az általános minta, mint
+  bármely `task.sh`-t használó projektben; nem ismételjük meg itt.
