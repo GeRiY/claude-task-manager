@@ -5,6 +5,32 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2026-07-08
+
+### Fixed
+- Board UI: write/validation errors now surface **in context** instead of behind the modal.
+  When a modal is open the message is shown inside it (sticky banner at the top of the
+  modal) rather than in the fixed page banner, which the overlay used to cover. The message
+  is **dismissible** (✕) and no longer auto-vanishes on the next poll — so a backend error
+  raised while approving/reviewing a task is actually readable. Applies to all three modals
+  (task, context, projects).
+
+### Changed
+- Header "As …" (actor / `task.sh --as`): defaults to **`human`** when left empty, both on
+  load and as a fallback in `ApiClient`. The first approve/review action no longer fails
+  with a hidden "set an actor first" error.
+- Projects modal: "Copy wrapper" → **"Copy for Claude Code"**. The button now copies a
+  single, ready-to-run bash script whose header carries a built-in instruction (as shell
+  comments right after the shebang) telling a Claude Code agent to save it as
+  `ctm-<id>.sh`, `chmod +x` it, and use it to reach and manage that project's board. A hint
+  at the top of the modal states the copied content is meant to be handed to Claude Code.
+
+### Added
+- Task **relations** (structured `dependsOn`) are now surfaced in the UI. Each card shows a
+  single summary badge (`🔗 N`) with the count of related tasks (dependencies + tasks it
+  blocks) and a tooltip listing them. The task modal gains a **Relations** section
+  ("Depends on" / "Blocks") with status-pilled, clickable links that open the related task.
+
 ## [1.0.5] - 2026-07-08
 
 ### Fixed

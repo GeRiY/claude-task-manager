@@ -38,9 +38,9 @@ export class ApiClient {
   async run(ops) {
     if (!this.enabled)
       throw new Error(I18n.t("app.notEnabled"));
-    const as = (this.getActor() || "").trim();
-    if (!as)
-      throw new Error(I18n.t("app.setActorFirst"));
+    // Ha nincs kitöltve a "Mint" mező, alapértelmezetten "human" nevében írunk —
+    // így a felület nem esik el a task.sh --as miatt (pl. első jóváhagyáskor).
+    const as = (this.getActor() || "").trim() || "human";
     const project = (this.getProject() || "").trim();
     if (!project)
       throw new Error(I18n.t("app.noProjectSelected"));

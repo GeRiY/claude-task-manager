@@ -77,7 +77,7 @@ export class App {
     this.pendingTask = s.pendingTask;
     this.collapsedCols = s.collapsedCols;
     if (s.interval) this.dom.interval.value = s.interval;
-    this.dom.actor.value = localStorage.getItem("tm.actor") || "";
+    this.dom.actor.value = localStorage.getItem("tm.actor") || "human";   // üresen alapból human
     this.dom.sort.value = this.sort;
     this.setViewButtons();
     this.setQuickButtons();
@@ -97,10 +97,30 @@ export class App {
     this.dom.dot.classList.remove("pulse"); void this.dom.dot.offsetWidth; this.dom.dot.classList.add("pulse");
     this.dom.statusText.textContent = text;
   }
+  // A hibaüzenetet a saját kontextusában mutatjuk meg: ha épp egy modal nyitva van,
+  // a modalon belül (modal-banner), különben a főoldali bannerben. Így soha nem kerül a
+  // modal takarásába, és nem tűnik el a poll miatt — a felhasználó zárja be, vagy a
+  // következő sikeres művelet törli. msg HTML-t is tartalmazhat (i18n sablon esc-elt értékkel).
   showBanner(msg) {
-    if (!msg) { this.dom.banner.classList.remove("show"); return; }
-    this.dom.banner.innerHTML = msg;
-    this.dom.banner.classList.add("show");
+    if (msg) {
+      const modalBanner = document.querySelector(".overlay.show .modal-banner");
+      const html = `<span class="banner-text">${msg}</span><button type="button" class="banner-close" aria-label="${Utils.esc(I18n.t("app.dismiss"))}">✕</button>`;
+      if (modalBanner) {
+        modalBanner.innerHTML = html;
+        modalBanner.classList.add("show");
+        this.dom.banner.classList.remove("show");   // ne maradjon takarásban a főoldali példány
+      } else {
+        this.dom.banner.innerHTML = html;
+        this.dom.banner.classList.add("show");
+      }
+      return;
+    }
+    // Törlés: csak a főoldali bannert. A modal-banner életciklusát külön kezeljük
+    // (modal nyitás/zárás, elvetés, vagy sikeres írás után) — lásd clearModalBanner().
+    this.dom.banner.classList.remove("show");
+  }
+  clearModalBanner() {
+    document.querySelectorAll(".modal-banner").forEach(b => { b.classList.remove("show"); b.innerHTML = ""; });
   }
   setViewButtons() {
     this.dom.viewBoard.classList.toggle("on", this.view === "board");
@@ -234,6 +254,7 @@ export class App {
   // ---- Modal ----
   openModal(id) {
     const t = this.taskStore.currentTasks.find(x => x.id === id); if (!t) return;
+    this.clearModalBanner();   // friss taszk → ne maradjon egy korábbi hiba a modalban
     this.openTaskId = id; this.syncURL();
     this.taskModal.render(t, this.boardView.teamIndex, this.taskStore.currentTasks, {
       writeEnabled: this.api.enabled, agents: this.agentsList(), modules: this.modulesList(),
@@ -242,6 +263,7 @@ export class App {
   }
   closeModal() {
     this.taskModal.hide();
+    this.clearModalBanner();
     this.openTaskId = null; this.syncURL();
   }
   openByTeam(n) {
@@ -340,7 +362,8 @@ export class App {
   // ---- Projects modal (registered projects + wrapper task.sh copying) ----
   openProjects() {
     const projects = this.projectStore.projects;
-    this.dom.projectsBody.innerHTML = projects.length
+    const hint = `<div class="proj-hint">${I18n.t("project.copyHint")}</div>`;
+    this.dom.projectsBody.innerHTML = hint + (projects.length
       ? projects.map(p => `
         <div class="proj-row">
           <div class="proj-row-main">
@@ -349,16 +372,29 @@ export class App {
           </div>
           <button type="button" class="copy-wrapper" data-project="${Utils.esc(p.id)}">${Utils.esc(I18n.t("project.wrapperCopy"))}</button>
         </div>`).join("")
-      : `<p class="mut">${I18n.t("project.none")}</p>`;
+      : `<p class="mut">${I18n.t("project.none")}</p>`);
     this.dom.projectsOverlay.classList.add("show");
   }
-  closeProjects() { this.dom.projectsOverlay.classList.remove("show"); }
+  closeProjects() { this.dom.projectsOverlay.classList.remove("show"); this.clearModalBanner(); }
   async copyWrapper(id, btn) {
     try {
       const res = await fetch(`wrappers/${id}.sh`, { cache: "no-store" });
       if (!res.ok) throw new Error("HTTP " + res.status);
-      const text = await res.text();
-      await this.copyToClipboard(text, btn);
+      const script = await res.text();
+      // A vágólapra egyetlen ÉRVÉNYES bash scriptet teszünk: a shebang marad az első sor, és
+      // közvetlenül utána KOMMENTKÉNT beszúrjuk a Claude Code agentnek szóló utasítást (mentse
+      // el ctm-<id>.sh néven, tegye futtathatóvá). Így „mentsd el ezt a teljes tartalmat"
+      // egyértelmű, a fájl azonnal futtatható, és a komment végrehajtáskor ártalmatlan.
+      const proj = this.projectStore.get(id);
+      const label = (proj && proj.label) || id;
+      const file = `ctm-${id}.sh`;
+      const comment = I18n.t("project.wrapperInstruction", { file, label })
+        .split("\n").map(l => "# " + l).join("\n");
+      const nl = script.indexOf("\n");
+      const payload = nl >= 0
+        ? script.slice(0, nl + 1) + comment + "\n" + script.slice(nl + 1)   // shebang + utasítás-komment + a script többi része
+        : comment + "\n" + script;
+      await this.copyToClipboard(payload, btn);
     } catch (e) {
       this.showBanner(I18n.t("app.wrapperLoadFailed", { msg: Utils.esc(e.message) }));
     }
@@ -372,7 +408,7 @@ export class App {
     if (this.dom.ctxOverlay.classList.contains("show")) this.contextPanel.renderBody(this.contextStore.context);
   }
   openCtx() { this.contextPanel.renderBody(this.contextStore.context); this.contextPanel.show(); }
-  closeCtx() { this.contextPanel.hide(); }
+  closeCtx() { this.contextPanel.hide(); this.clearModalBanner(); }
 
   // ---- #3 Browser notification + title badge ----
   async toggleNotify() {
@@ -485,6 +521,9 @@ export class App {
     dom.board.addEventListener("click", e => {
       const dep = e.target.closest(".badge.dep-active, .badge.dep-done");
       if (dep && dep.dataset.team) { e.stopPropagation(); this.openByTeam(+dep.dataset.team); return; }
+      // Strukturált kapcsolat-badge (dependsOn/blocks) → a kapcsolódó taszk megnyitása.
+      const rel = e.target.closest(".badge.rel");
+      if (rel && rel.dataset.task) { e.stopPropagation(); this.openModal(rel.dataset.task); return; }
       // Clicking a column header does NOT collapse the column (per user request).
       if (e.target.closest(".col-head")) return;
       const fi = e.target.closest(".feed-item"); if (fi) { this.openModal(fi.dataset.id); return; }
@@ -506,6 +545,12 @@ export class App {
     });
     // Persist the actor ("As …") across sessions.
     dom.actor.addEventListener("change", () => localStorage.setItem("tm.actor", dom.actor.value.trim()));
+    // A hibaüzenet elvetése (főoldali banner és modal-banner egyaránt).
+    document.addEventListener("click", e => {
+      if (!e.target.closest(".banner-close")) return;
+      const host = e.target.closest(".banner, .modal-banner");
+      if (host) { host.classList.remove("show"); host.innerHTML = ""; }
+    });
     dom.mClose.addEventListener("click", () => this.closeModal());
     dom.overlay.addEventListener("click", e => { if (e.target === dom.overlay) this.closeModal(); });
     dom.ctxBtn.addEventListener("click", () => this.openCtx());

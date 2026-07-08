@@ -67,6 +67,18 @@ export class BoardView {
       const cls = deps.active ? "dep-active" : "dep-done";
       return `<span class="badge ${cls}" data-team="${n}" title="${blk ? Utils.esc(blk.title) : "?"}">${deps.active ? "⛔" : "✅"} #${n}</span>`;
     }).join("");
+    // Strukturált kapcsolatok (dependsOn): a kártyán EGY összesítő badge, a kapcsolódó
+    // jegyek darabszámával. A teljes lista a modalban látszik (kártyára kattintva).
+    const dependsOn = Array.isArray(t.dependsOn) ? t.dependsOn : [];
+    const blocks = this.blocksIndex ? (this.blocksIndex.get(t.id) || []) : [];
+    const relCount = dependsOn.length + blocks.length;
+    const relTitle = [
+      ...dependsOn.map(id => { const d = this.idIndex ? this.idIndex.get(id) : null; return "⬇ " + (d ? (d.title || d.id) : id); }),
+      ...blocks.map(b => "⬆ " + (b.title || b.id)),
+    ].join(" · ");
+    const relBadges = relCount
+      ? `<span class="badge rel rel-sum" title="${Utils.esc(I18n.t("rel.related"))}: ${Utils.esc(relTitle)}">🔗 ${relCount}</span>`
+      : "";
     // #1 "Awaiting you" age badge on a review-status card (escalating emphasis).
     let waitBadge = "";
     if (t.status === "review") {
@@ -81,7 +93,7 @@ export class BoardView {
     if (lk) kindBadge = `<span class="kind-badge ${lk.cls}" title="latest note's phase">${Utils.esc(lk.label)}</span>`;
     const moduleColor = t.module ? Utils.agentColor(t.module) : null;
     const moduleBadge = t.module ? `<span class="badge module" style="border-color:${Utils.hexA(moduleColor, .4)};color:${moduleColor}">${Utils.esc(t.module)}</span>` : "";
-    const badges = (team ? `<span class="badge team">Team #${team}</span>` : "") + moduleBadge + waitBadge + kindBadge + chBadges + depBadges;
+    const badges = (team ? `<span class="badge team">Team #${team}</span>` : "") + moduleBadge + waitBadge + kindBadge + chBadges + depBadges + relBadges;
     const upd = t.lastActivityAt || t.updatedAt;
     const who = t.assignedAgentId || null;
     const whoColor = Utils.agentColor(who);
@@ -139,7 +151,14 @@ export class BoardView {
     const tasks = this.visibleTasks(allTasks, state);
 
     this.teamIndex = new Map();
-    allTasks.forEach(t => { const n = Utils.parseTeam(t); if (n != null) this.teamIndex.set(n, t); });
+    // Strukturált kapcsolatok (task.sh dependsOn): id → taszk, és a fordított él (ki függ tőle).
+    this.idIndex = new Map();
+    this.blocksIndex = new Map();   // id → [taszkok, amelyek dependsOn-ja tartalmazza]
+    allTasks.forEach(t => { const n = Utils.parseTeam(t); if (n != null) this.teamIndex.set(n, t); this.idIndex.set(t.id, t); });
+    allTasks.forEach(t => (Array.isArray(t.dependsOn) ? t.dependsOn : []).forEach(d => {
+      if (!this.blocksIndex.has(d)) this.blocksIndex.set(d, []);
+      this.blocksIndex.get(d).push(t);
+    }));
 
     // Stats + cycle time
     const counts = Object.fromEntries(COLUMNS.map(c => [c.key, 0]));

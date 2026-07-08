@@ -142,6 +142,9 @@ input#src { width: 100%; font-family: var(--mono); font-size: 12px; }
 .src-select:focus-visible { outline: none; box-shadow: none; }
 
 /* --- Projektek modal (wrapper-lista + másolás) --- */
+.proj-hint { margin: 0 0 14px; padding: 11px 14px; border-radius: var(--radius-md); background: var(--accent-tint-bg); border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent); color: var(--text); font-size: 12.5px; line-height: 1.55; }
+.proj-hint b { color: var(--text-strong); }
+.proj-hint code { font-size: 11px; }
 .proj-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 11px 0; border-bottom: 1px solid var(--border-soft); }
 .proj-row:last-child { border-bottom: none; }
 .proj-row-label { font: 600 13px var(--font); color: var(--text); }
@@ -268,6 +271,10 @@ button.agents-head:hover { background: rgba(255,255,255,.03); border: none; colo
 .badge.dep-done { opacity: .6; text-decoration: line-through; cursor: pointer; transition: filter .12s ease, opacity .12s ease; }
 .badge.dep-active:hover, .badge.dep-done:hover { filter: brightness(1.2); }
 .badge.dep-done:hover { opacity: .85; }
+/* Strukturált kapcsolat-badge-ek (dependsOn / blocks). */
+.badge.rel { cursor: pointer; max-width: 190px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; transition: filter .12s ease; }
+.badge.rel:hover { filter: brightness(1.2); }
+.badge.rel-sum { background: var(--accent-tint-bg); color: var(--accent-tint-text); border-color: transparent; font-variant-numeric: tabular-nums; }
 .card h3 { margin: 0 0 7px; font: 600 14.5px/1.35 var(--font); letter-spacing: -.005em; color: #eceef1; }
 .card .desc { color: #8b929c; font: 400 12.5px/1.55 var(--font); margin: 0 0 12px; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 .card .meta { display: flex; flex-wrap: wrap; gap: 6px 8px; align-items: center; }
@@ -298,7 +305,20 @@ button.agents-head:hover { background: rgba(255,255,255,.03); border: none; colo
 
 .empty { color: #4b515c; font: 500 12px var(--mono); text-align: center; padding: 22px 6px; margin: 6px 0; border: 1px dashed rgba(255,255,255,.08); border-radius: 11px; }
 .banner { margin: 12px 20px 0; padding: 12px 16px; border-radius: var(--radius-md); background: var(--danger-bg); border: 1px solid var(--danger-border); color: var(--danger-text); font-size: 12.5px; display: none; }
-.banner.show { display: block; }
+.banner.show { display: flex; align-items: flex-start; gap: 10px; }
+.banner .banner-text { flex: 1 1 auto; min-width: 0; }
+
+/* A hibaüzenet a saját kontextusában: nyitott modal esetén a modal tetején (sticky),
+   hogy ne takarja el az overlay és görgetéskor is elérhető maradjon. Nem tűnik el
+   magától — a felhasználó zárja be, vagy a következő sikeres művelet törli. */
+.modal-banner { display: none; position: sticky; top: 8px; z-index: 2; margin: 12px 16px 0; padding: 11px 14px; border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--danger-bg) 80%, var(--panel)); border: 1px solid var(--danger-border); color: var(--danger-text); font-size: 12.5px;
+  box-shadow: 0 8px 22px -12px rgba(0,0,0,.6); }
+.modal-banner.show { display: flex; align-items: flex-start; gap: 10px; }
+.modal-banner .banner-text { flex: 1 1 auto; min-width: 0; }
+.banner-close { flex: 0 0 auto; height: 22px; min-width: 22px; padding: 0 6px; font-size: 12px; line-height: 1;
+  background: transparent; border: 1px solid var(--danger-border); border-radius: var(--radius-sm); color: var(--danger-text); cursor: pointer; }
+.banner-close:hover { background: color-mix(in srgb, var(--err) 20%, transparent); color: #fff; }
 code { background: var(--panel-2); border: 1px solid var(--border); padding: 2px 6px; border-radius: var(--radius-sm); font: 500 12px var(--mono); }
 
 /* Modal */

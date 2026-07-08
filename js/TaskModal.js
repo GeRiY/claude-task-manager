@@ -81,6 +81,15 @@ export class TaskModal {
       [I18n.t("modal.kv.lastActivity"), t.lastActivityAt ? `${Utils.absTime(t.lastActivityAt)} (${Utils.relTime(t.lastActivityAt)})` : null],
     ].filter(r => r[1] != null && r[1] !== "");
     const depLink = n => { const b = teamIndex.get(n); return `<span class="badge dep-active deplink" data-team="${n}">#${n}${b ? " " + Utils.esc((b.title || "").slice(0, 28)) : ""}</span>`; };
+    // Strukturált kapcsolatok (task.sh dependsOn): mire vár ez a taszk, és mely taszkok várnak rá.
+    const idIndex = new Map(allTasks.map(x => [x.id, x]));
+    const dependsOn = Array.isArray(t.dependsOn) ? t.dependsOn : [];
+    const blockRel = allTasks.filter(x => Array.isArray(x.dependsOn) && x.dependsOn.includes(t.id));
+    const relLink = id => {
+      const r = idIndex.get(id), label = r ? (r.title || r.id) : id, st = r ? r.status : null;
+      const pill = st ? `<span class="pill${Utils.pillClass(st)}" style="background:${COLOR[st] || "var(--muted)"}">${Utils.esc(st)}</span> ` : "";
+      return `<span class="badge dep-active deplink" data-task="${Utils.esc(id)}" title="${Utils.esc(String(label))}">${pill}${Utils.esc(String(label).slice(0, 44))}</span>`;
+    };
     const history = Array.isArray(t.history) ? t.history.slice().sort((a, b) => new Date(a.at) - new Date(b.at)) : [];
 
     this.dom.mBody.innerHTML =
@@ -94,6 +103,9 @@ export class TaskModal {
       ((deps.blockedBy.length || blocks.length) ? `<h4>${Utils.esc(I18n.t("modal.dependencies"))}</h4>` : "") +
       (deps.blockedBy.length ? `<div class="row"><span class="lbl">${Utils.esc(deps.active ? I18n.t("modal.blockedBy") : I18n.t("modal.wasBlockedBy"))}</span> <span class="deplinks">${deps.blockedBy.map(depLink).join("")}</span></div>` : "") +
       (blocks.length ? `<div class="row"><span class="lbl">${Utils.esc(I18n.t("modal.blocks"))}</span> <span class="deplinks">${blocks.map(b => `<span class="badge dep-active deplink" data-task="${Utils.esc(b.id)}">${Utils.esc(b.title.slice(0, 32))}</span>`).join("")}</span></div>` : "") +
+      ((dependsOn.length || blockRel.length) ? `<h4>${Utils.esc(I18n.t("modal.relations"))}</h4>` : "") +
+      (dependsOn.length ? `<div class="row"><span class="lbl">${Utils.esc(I18n.t("rel.dependsOn"))}</span> <span class="deplinks">${dependsOn.map(relLink).join("")}</span></div>` : "") +
+      (blockRel.length ? `<div class="row"><span class="lbl">${Utils.esc(I18n.t("rel.blocks"))}</span> <span class="deplinks">${blockRel.map(x => relLink(x.id)).join("")}</span></div>` : "") +
       `<h4>${Utils.esc(I18n.t("modal.data"))}</h4><dl class="kv">${kv.map(([k, v]) => `<dt>${Utils.esc(k)}</dt><dd>${Utils.esc(v)}${k === I18n.t("modal.kv.id") ? ` <button type="button" class="copy-id" data-copy="${Utils.esc(v)}" title="${Utils.esc(I18n.t("modal.copyIdTitle"))}">${Utils.esc(I18n.t("modal.copyId"))}</button>` : ""}</dd>`).join("")}</dl>` +
       (notes.length ? `<h4>${Utils.esc(I18n.t("modal.notes", { n: notes.length }))}</h4><ul class="notes">${notes.map(n => {
         const k = Utils.noteKind(n.text);
