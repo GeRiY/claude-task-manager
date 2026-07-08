@@ -129,6 +129,23 @@ commands) — never with `Write`/`Edit`:
 
 At the start of every session, **read `task.sh ctx` first**, and let it guide the work.
 
+## Roles — the main agent coordinates, teammates execute
+
+The **main agent does NOT do the implementation work itself.** Its job is to capture and
+break down requests into tasks, `add`/`assign` them, coordinate, review, and decide the
+handoff — it does **not** write the code/dev work directly. All actual implementation and
+follow-up work is **delegated to teammate subagents** — the project's `ctm-*` agents (and
+`tm-*` agents where present). The main agent only: plans, adds/assigns tasks, reviews the
+result, and decides the `review → done | assign+todo` handoff.
+
+- When a request is actionable, `main` creates the task(s) and **assigns** them to the
+  appropriate `ctm-*` / `tm-*` teammate (`… assign <id> <agent> --as main`) instead of
+  starting to implement.
+- Each teammate claims its task, moves it to `in_progress`, does the work, and updates
+  status with its own `--as <name>` (never `--as main`).
+- `main` stays the coordinator across the whole loop: fill teammate queues, keep tasks
+  assigned, and on `review` decide `done` or reassign.
+
 ## Required workflow
 
 Every step goes through `task.sh` (never a direct JSON write). **Add `--as main` to
