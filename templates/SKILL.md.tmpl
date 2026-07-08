@@ -65,6 +65,14 @@ without a permission prompt.
 > (`summary`, `list`, `get`, `ctx` …); only use `Read` on the JSON as a last resort, and
 > never to write. (For `context.json`, use the `ctx-*` commands — see below.)
 
+> **If `task.sh` fails with `Permission denied` / `Could not open file … tasks.json`:** the
+> board's data files are owned by `root` (a container that ran as root wrote them — happens on
+> native Linux Docker). The file is `-rw-------` root:root, so the host user can neither read
+> nor write it, and `task.sh` itself dies at the `jq` read — this is NOT fixable by writing
+> the JSON directly (that fails too). Ask the user to run **`ctm fix-perms`** (reclaims
+> ownership; no `sudo` needed while the board is up), then retry. A restarted board (`ctm up`)
+> keeps running as the host user, so it won't reoccur.
+
 Canonical calling form (with the FULL absolute path, from any working directory):
 
 ```

@@ -5,6 +5,26 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.1] - 2026-07-08
+
+### Fixed
+- Root-owned `tasks.json` on **native Linux Docker**: the container ran as `root` (no `USER`
+  in the Dockerfile), so the board's PHP write endpoint (`api/index.php`) invoked
+  `engine/task.sh` as UID 0 and left `data/<project>/tasks.json` as `root:root` `-rw-------`.
+  From then on the host user (and the Claude agent) could neither read nor write it — even
+  `task.sh` died at its `jq` read, and a direct `Write`/`Edit` hit `Permission denied`.
+  `docker-compose.yml` now runs the container as the host user
+  (`user: "${CTM_UID:-0}:${CTM_GID:-0}"`), and `bin/ctm` writes the real `CTM_UID`/`CTM_GID`
+  into `.env` on every `up`/`autostart`, so the engine always writes files owned by the host
+  user. (macOS Docker Desktop already masked this via UID remapping; the fix is for Linux.)
+
+### Added
+- `ctm fix-perms`: reclaims ownership of `data/` files a previously root-running container
+  left as `root:root`. Chowns **through the container's root** (`docker exec -u 0`), so no
+  host `sudo` is needed while the board is up; falls back to a host `chown` otherwise.
+- `SKILL.md` template: troubleshooting note steering agents to `ctm fix-perms` (not a direct
+  JSON write, which also fails) when `task.sh` reports `Permission denied` on `tasks.json`.
+
 ## [1.1.0] - 2026-07-08
 
 ### Fixed

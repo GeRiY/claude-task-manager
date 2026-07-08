@@ -19,6 +19,8 @@
 #   ctm down                        Stop the board.
 #   ctm autostart on|off            Auto-start the container on Docker/machine restart
 #                                    (docker restart-policy) — sets and applies it.
+#   ctm fix-perms                   Reclaim data/ ownership from a root-running container
+#                                    (native Linux Docker) — chowns via the container root.
 
 set -euo pipefail
 
@@ -47,6 +49,13 @@ set_env_var() {
   [[ -f "$file" ]] && grep -v "^${key}=" "$file" > "$tmp" || true
   echo "${key}=${value}" >> "$tmp"
   mv "$tmp" "$file"
+}
+# Persist the host user's UID/GID into .env so docker-compose.yml's `user:` runs the
+# container AS the host user — this keeps data/ (tasks.json etc.) owned by the host user
+# instead of root. Called before every `docker compose up`. See docker-compose.yml.
+set_host_uid_gid() {
+  set_env_var "$ROOT_DIR/.env" "CTM_UID" "$(id -u)"
+  set_env_var "$ROOT_DIR/.env" "CTM_GID" "$(id -g)"
 }
 current_port() {
   # `|| true` is REQUIRED: under `set -euo pipefail`, if .env has no CTM_PORT= line
@@ -117,6 +126,7 @@ case "$cmd" in
     [[ "$port" =~ ^[0-9]+$ ]] || die "invalid port: $port"
     check_port_free "$port"
     set_env_var "$ROOT_DIR/.env" "CTM_PORT" "$port"
+    set_host_uid_gid
     # `docker compose up -d` is itself idempotent: if the container isn't running, it starts
     # it; if it's running and the config (e.g. port) changed, it's automatically recreated
     # with the new setting; if it's running and nothing changed, it does nothing.
@@ -133,8 +143,23 @@ case "$cmd" in
       off) set_env_var "$ROOT_DIR/.env" "CTM_RESTART" "no" ;;
       *) die "usage: ctm autostart on|off" ;;
     esac
+    set_host_uid_gid
     (cd "$ROOT_DIR" && docker compose up -d --build)
     echo "autostart: $mode (restart-policy: $(grep '^CTM_RESTART=' "$ROOT_DIR/.env" | cut -d= -f2))"
+    ;;
+  fix-perms)
+    # Reclaim ownership of data/ files that a previously root-running container left as
+    # root:root (native Linux Docker). Chowns THROUGH the container's root (docker exec -u 0)
+    # so no host `sudo` is needed; falls back to a host chown if the container isn't running.
+    uid="$(id -u)"; gid="$(id -g)"
+    if docker ps --filter "name=^claude-task-manager$" --format '{{.Names}}' 2>/dev/null | grep -q .; then
+      docker exec -u 0 claude-task-manager chown -R "${uid}:${gid}" /app/data \
+        && echo "fixed: data/ ownership → ${uid}:${gid} (via container root)"
+    elif chown -R "${uid}:${gid}" "$ROOT_DIR/data" 2>/dev/null; then
+      echo "fixed: data/ ownership → ${uid}:${gid} (host chown)"
+    else
+      die "container not running and host chown failed — start it (ctm up) then rerun, or: sudo chown -R ${uid}:${gid} \"$ROOT_DIR/data\""
+    fi
     ;;
   help|-h|--help|"")
     cat <<'EOF'
@@ -157,6 +182,9 @@ ctm — claude-task-manager CLI
                                    a port, sets it and restarts if needed.
   ctm down                        Stop the board.
   ctm autostart on|off            Auto-start the container on Docker/machine restart.
+  ctm fix-perms                   Reclaim ownership of data/ files a root-running container
+                                   left as root:root (native Linux Docker). No sudo needed
+                                   while the container is up.
 EOF
     ;;
   *) die "unknown command: $cmd (help: ctm help)" ;;

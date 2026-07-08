@@ -5,6 +5,13 @@ services:
       dockerfile: Dockerfile
     container_name: claude-task-manager
     restart: ${CTM_RESTART:-no}   # "unless-stopped"-re állítva: ctm autostart on
+    # A konténer a HOST user UID:GID-jével fut, ezért a PHP write-endpoint (api/index.php)
+    # által hívott task.sh a bind-mountolt data/-ba a host user tulajdonával ír. Enélkül a
+    # konténer root (uid=0) írná a tasks.json-t, ami natív Linux Dockeren a hoston is root:root
+    # 0600 fájlt eredményez — onnantól a host user (a Claude) se olvasni, se írni nem tudja, és
+    # a task.sh is elhasal a jq-olvasásnál. A `ctm up`/`autostart` a .env-be írja a valós
+    # CTM_UID/CTM_GID-t; a :-0 default csak akkor lép be, ha valaki nyersen indítja a compose-t.
+    user: "${CTM_UID:-0}:${CTM_GID:-0}"
     ports:
       - "127.0.0.1:${CTM_PORT:-3333}:${CTM_PORT:-3333}"   # csak a host loopbackjén, ne a LAN-on
     volumes:
