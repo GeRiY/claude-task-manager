@@ -28,9 +28,9 @@ This document records **only the task-manager workflow**: when and how to run `t
 
 ## The work cycle (claim → work → report)
 
-1. **What should I pick up?** — your assigned / free tasks:
-   `task.sh list todo --agent frontend-developer --as frontend-developer`
-   `task.sh next --as frontend-developer`   (the next one with no open dependency, sorted by priority)
+1. **What should I pick up?** — prefer `next` (it honours priority); use `list` only for an overview, since `list` is NOT priority-sorted:
+   `task.sh next --as frontend-developer`   (highest-priority todo with no open dependency)
+   `task.sh list todo --agent frontend-developer --as frontend-developer`   (overview of your queue)
 2. **Don't start a blocked task.** If `dependsOn` isn't `done`, leave it:
    `task.sh deps <id> --as frontend-developer`
 3. **Claim:** assign it to yourself and set it to `in_progress` (two separate, bare calls):

@@ -28,9 +28,9 @@ This document records **only the task-manager workflow**: when and how to run `t
 
 ## The work cycle (claim → work → report)
 
-1. **What should I pick up?**
-   `task.sh list todo --agent backend-developer --as backend-developer`
-   `task.sh next --as backend-developer`
+1. **What should I pick up?** — prefer `next` (it honours priority); use `list` only for an overview, since `list` is NOT priority-sorted:
+   `task.sh next --as backend-developer`   (highest-priority todo with no open dependency)
+   `task.sh list todo --agent backend-developer --as backend-developer`   (overview of your queue)
 2. **Don't start a blocked task.** Backend work often builds on investigation — let `code-investigator` close it first:
    `task.sh deps <id> --as backend-developer`
 3. **Claim:**

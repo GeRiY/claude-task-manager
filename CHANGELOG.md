@@ -5,6 +5,39 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.5] - 2026-07-08
+
+### Fixed
+- `bin/ctm`: `ctm up` no longer silently aborts on first run (missing or empty `.env`).
+  Under `set -euo pipefail`, `current_port()`'s `grep '^CTM_PORT='` pipe exited non-zero
+  when there was no `CTM_PORT=` line, the `$(current_port)` substitution inherited that
+  failure, and `set -e` killed the script — with no error and before `docker compose up`
+  ever ran. Added `|| true` to the pipe so it returns empty and falls back to the default
+  port (`3333`).
+
+### Added
+- SKILL.md template: a **Roles** section spelling out that the main agent coordinates
+  (capture/break down/assign/review) and delegates all implementation to `ctm-*`/`tm-*`
+  teammates rather than doing the work itself.
+- SKILL.md template: a **teammate roster** table mapping each Agent launch name
+  (`ctm-frontend-developer`, …) to its stripped task-manager identity
+  (`frontend-developer`, …), so `assign` targets the identity the teammate actually
+  filters on instead of the `ctm-`/`tm-` launch name.
+- SKILL.md template: **model-choice guidance** for launching teammates — `haiku` for
+  small/mechanical edits, `sonnet` for investigation/planning/testing, with `opus` and
+  `fable`/`claude-fable-5` explicitly disallowed. The `ctm-*` frontmatter `model:` is only
+  a default that the main overrides per launch via the Agent `model` parameter.
+- SKILL.md template: documented the `module` command and the `list --module <m>` filter in
+  the structured-fields catalog (already supported by `task.sh`, previously undocumented),
+  plus workflow guidance for the main to set `priority` (and optionally `module`) at task
+  creation.
+
+### Changed
+- `ctm-*` agent templates (frontend / backend / code-investigator): the task-pickup step
+  now prefers `next` (priority-ordered) as the primary claim path and demotes `list` to an
+  overview, since `list` is not priority-sorted — so main-set priorities actually take
+  effect.
+
 ## [1.0.4] - 2026-07-07
 
 ### Fixed
@@ -56,6 +89,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Update-check notice (`engine/check-update.sh`) on all admin-facing scripts.
 - Published to npm as `claude-task-manager`.
 
+[1.0.5]: https://github.com/GeRiY/claude-task-manager/releases/tag/v1.0.5
 [1.0.4]: https://github.com/GeRiY/claude-task-manager/releases/tag/v1.0.4
 [1.0.3]: https://github.com/GeRiY/claude-task-manager/releases/tag/v1.0.3
 [1.0.2]: https://github.com/GeRiY/claude-task-manager/releases/tag/v1.0.2

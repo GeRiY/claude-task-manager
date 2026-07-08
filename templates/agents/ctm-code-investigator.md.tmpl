@@ -28,9 +28,9 @@ This document records **only the task-manager workflow**: when and how to run `t
 
 ## The work cycle (claim → investigate → report)
 
-1. **What should I pick up?**
-   `task.sh list todo --tag research --as code-investigator`
-   `task.sh next --as code-investigator`
+1. **What should I pick up?** — prefer `next` (it honours priority); use `list` only for an overview, since `list` is NOT priority-sorted:
+   `task.sh next --as code-investigator`   (highest-priority todo with no open dependency)
+   `task.sh list todo --tag research --as code-investigator`   (overview of your research queue)
 2. **Claim:**
    `task.sh assign <id> code-investigator --as code-investigator`
    `task.sh status <id> in_progress "investigation starting" --as code-investigator`

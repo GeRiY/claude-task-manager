@@ -99,13 +99,14 @@ Most common commands (always call with the FULL absolute path — copy it as sho
 
 **Structured fields and workflow commands** (instead of encoding them into title/notes text):
 
-- `… priority <id> <low|normal|high|urgent>` — priority.
+- `… priority <id> <low|normal|high|urgent>` — priority (drives `next` ordering; note `list` is NOT priority-sorted).
 - `… tag <id> <add|rm> <tag>` — tags (e.g. `frontend`/`backend`/`test`).
-- `… assign <id> <agent>` — sets `assignedAgentId` (more convenient than `set` for claiming).
+- `… module <id> <area>` — functional-area label (`assignedModule`), e.g. `event-edit`/`billing`; free text, empty string clears it. A separate axis from the work-type `tag`; filter with `list --module <area>`.
+- `… assign <id> <agent>` — sets `assignedAgentId` (more convenient than `set` for claiming). Use the **stripped identity** from the roster below, NOT the `ctm-`/`tm-` launch name.
 - `… dep <id> <add|rm> <other-id>` — dependency (`dependsOn`): `id` waits on `other-id`; includes cycle and existence checks.
 - `… deps <id>` — what this task is waiting on and what it blocks.
 - `… next` — the next recommended `todo` task (no open dependency), sorted by priority.
-- `… list [status] --tag <t> --agent <a> --priority <p> --all --json` — filtered/machine-readable list.
+- `… list [status] --tag <t> --agent <a> --priority <p> --module <m> --all --json` — filtered/machine-readable list.
 - `… status-many <status> <id...>` — move multiple tasks to one status in a SINGLE atomic write.
 - `… reopen <id> [status]` — reopen a closed/archived task.
 - `… validate` — schema check (required fields, status, priority, broken dependencies, duplicate ids).
@@ -145,6 +146,30 @@ result, and decides the `review → done | assign+todo` handoff.
   status with its own `--as <name>` (never `--as main`).
 - `main` stays the coordinator across the whole loop: fill teammate queues, keep tasks
   assigned, and on `review` decide `done` or reassign.
+- **Model choice on launch (token efficiency).** The `ctm-*` frontmatter `model:` is only a
+  **default** — the main overrides it **per launch** via the Agent `model` parameter, so
+  every teammate can be started with **either `haiku` or `sonnet`**, chosen by task weight:
+  - `haiku` — mechanical / small, well-scoped edits (rename, move, boilerplate, a single
+    localized change with a clear spec).
+  - `sonnet` — investigation, planning, multi-file or ambiguous changes, and any testing.
+  When unsure, prefer `sonnet`. **Never use `opus`, `fable`/`claude-fable-5`** — teammates
+  run only on `haiku` or `sonnet`.
+
+### Teammate roster — assign identity ≠ launch name
+
+The Agent **launch name** (`subagent_type`, prefixed `ctm-`/`tm-`) is NOT the task-manager
+identity. When you `assign`, always use the **stripped identity** below — it must exactly
+match the teammate's own `--as` / "which tasks are mine" filter, or the task sits unclaimed.
+
+| Launch name (subagent_type) | `assign` / `--as` identity |
+|---|---|
+| `ctm-frontend-developer`    | `frontend-developer` |
+| `ctm-backend-developer`     | `backend-developer` |
+| `ctm-code-investigator`     | `code-investigator` |
+
+The project may also ship `tm-*` variants with their **own** stripped identities (e.g.
+`tm-frontend` → `frontend`) — check the `--as` line inside each `tm-*` agent before
+assigning, and don't mix a `ctm-*` identity with a `tm-*` one.
 
 ## Required workflow
 
@@ -153,7 +178,7 @@ every non-meta command** (as the main agent); a teammate uses its own `--as <nam
 
 1. Before handling an actionable request, `task.sh summary --as main` / `list … --as main`.
 2. At session start, `task.sh ctx --as main`; if missing, `ctx-init "<initPrompt>" "<goal>" --as main`.
-3. If the last user message is actionable and there's no active task for it, immediately `task.sh add <id> "<title>" "<desc>" --as main`.
+3. If the last user message is actionable and there's no active task for it, immediately `task.sh add <id> "<title>" "<desc>" --as main`. On add, set **priority** only when it isn't ordinary — `… priority <id> high|urgent --as main` for blockers or user-flagged urgency (`normal` is the default; don't set it explicitly). This is what makes a teammate's `next` pick the right task first. Optionally label the **functional area** with `… module <id> <area> --as main` when filtering the board by area (`list --module <area>`) is useful — a separate axis from the `frontend`/`backend` work-type tags.
 4. Before starting work, the task should be `todo`, or run `task.sh status <id> in_progress --as main`.
 5. If the work cannot proceed, `task.sh status <id> blocked "<reason>" --as main`.
 6. When done, `task.sh status <id> done --as main`.

@@ -49,7 +49,10 @@ set_env_var() {
   mv "$tmp" "$file"
 }
 current_port() {
-  grep '^CTM_PORT=' "$ROOT_DIR/.env" 2>/dev/null | head -1 | cut -d= -f2
+  # `|| true` is REQUIRED: under `set -euo pipefail`, if .env has no CTM_PORT= line
+  # (first run / missing .env) grep exits 1, the pipeline fails, and the `$(current_port)`
+  # substitution in `up` would silently kill the whole script before `docker compose up`.
+  grep '^CTM_PORT=' "$ROOT_DIR/.env" 2>/dev/null | head -1 | cut -d= -f2 || true
 }
 
 # True if OUR OWN container (claude-task-manager) is already running and already listening
