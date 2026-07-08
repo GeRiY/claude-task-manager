@@ -4,7 +4,8 @@
 [![npm downloads](https://img.shields.io/npm/dm/%40mgeri1993%2Fclaude-task-manager.svg)](https://www.npmjs.com/package/@mgeri1993/claude-task-manager)
 [![license](https://img.shields.io/npm/l/%40mgeri1993%2Fclaude-task-manager.svg)](https://github.com/GeRiY/claude-task-manager/blob/main/LICENSE)
 
-🌐 **English** | [Magyar](https://github.com/GeRiY/claude-task-manager/blob/main/README.hu.md)
+[![English](https://img.shields.io/badge/lang-English-2b7489?style=flat-square)](https://github.com/GeRiY/claude-task-manager/blob/main/README.md)
+[![Magyar](https://img.shields.io/badge/lang-Magyar-lightgrey?style=flat-square)](https://github.com/GeRiY/claude-task-manager/blob/main/README.hu.md)
 
 A standalone, dockerized, **multi-project** Kanban task manager for coordinating Claude
 Code agents (main agent + teammates). One shared browser board, a token-efficient
@@ -61,14 +62,16 @@ That's it — there's no build step. Two things you'll typically do next:
    the manual `ln -s` above is optional — only needed if you want `ctm` available before
    installing into any project.)
 
-See [Quick start](#quick-start) below for the full command reference.
+See [Quick start](https://github.com/GeRiY/claude-task-manager/blob/main/README.md#quick-start)
+below for the full command reference.
 
 ## Architecture in a nutshell
 
 - **`engine/task.sh`** — the actual Kanban engine (jq-based, atomic writes, locking,
   `events.jsonl`-based inbox notifications). Points at any project's own data directory via
   the `TM_DIR` environment variable. Prints a stderr reminder on every run if the project's
-  preferred language (set from the board) isn't English — see [Language](#language--i18n).
+  preferred language (set from the board) isn't English — see
+  [Language](https://github.com/GeRiY/claude-task-manager/blob/main/README.md#language--i18n).
 - **`engine/projects.sh`** — the project-registration admin CLI: for every registered
   project it creates a `data/<id>/` data directory and a `wrappers/<id>.sh` wrapper that
   already has `TM_DIR` and the engine's absolute path **baked in**.
@@ -86,7 +89,7 @@ See [Quick start](#quick-start) below for the full command reference.
   definition in an already-installed project.
 - **`engine/check-update.sh`** — sourced by the admin-facing scripts (`ctm`, `install.sh`,
   `add-agent.sh`, `projects.sh`) to print a yellow "update available" notice — see
-  [Staying up to date](#staying-up-to-date).
+  [Staying up to date](https://github.com/GeRiY/claude-task-manager/blob/main/README.md#staying-up-to-date).
 
 **Important:** `task.sh` calls (agent work) need **no docker at all** — the wrappers are
 plain host-bash scripts. Only the browser **board** and its **API** run in a container.
@@ -263,3 +266,23 @@ See `.env.example` (the real `.env` is gitignored, since `ctm` writes/updates it
   destructive commands (`rm`, `restore`, `raw`, `archive`) are never exposed to the browser.
 - The `project` id in every write request is checked against `data/projects.json`'s
   registered list — a client can never point the API at an arbitrary directory.
+
+## Community & discussions
+
+Questions, ideas, and configs live in
+[**GitHub Discussions**](https://github.com/GeRiY/claude-task-manager/discussions) — the
+place for everything that isn't a concrete bug (those belong in
+[Issues](https://github.com/GeRiY/claude-task-manager/issues)). Good things to bring:
+
+- **Setup & workflows** — multi-agent setups, `ctm init`, and the `--as <agent>` calling
+  contract.
+- **Sharing configs** — your teammate/agent definitions (`ctm-*` roles, custom `tm-*`
+  agents) and stack adaptations.
+- **Feature ideas** — new `task.sh` commands, board improvements, i18n, or CI/publishing
+  upgrades.
+- **Usability friction** — unclear docs, confusing install steps, or module-filtering edge
+  cases (actual bugs → Issues).
+
+New here? Say hi in the
+[welcome thread](https://github.com/GeRiY/claude-task-manager/discussions/1) — tell us
+which projects you coordinate agents on and what you're using the tool for.

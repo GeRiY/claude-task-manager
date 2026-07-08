@@ -4,7 +4,8 @@
 [![npm downloads](https://img.shields.io/npm/dm/%40mgeri1993%2Fclaude-task-manager.svg)](https://www.npmjs.com/package/@mgeri1993/claude-task-manager)
 [![license](https://img.shields.io/npm/l/%40mgeri1993%2Fclaude-task-manager.svg)](https://github.com/GeRiY/claude-task-manager/blob/main/LICENSE)
 
-🌐 [English](https://github.com/GeRiY/claude-task-manager/blob/main/README.md) | **Magyar**
+[![English](https://img.shields.io/badge/lang-English-lightgrey?style=flat-square)](https://github.com/GeRiY/claude-task-manager/blob/main/README.md)
+[![Magyar](https://img.shields.io/badge/lang-Magyar-2b7489?style=flat-square)](https://github.com/GeRiY/claude-task-manager/blob/main/README.hu.md)
 
 Önálló, dockerizált, **több projektet** kiszolgáló Kanban task-manager Claude Code
 agentek (fő agent + teammate-ek) koordinálásához. Egy közös böngészős board, egy
@@ -61,14 +62,17 @@ Ennyi — nincs build-lépés. Ezután jellemzően két dolgot csinálsz:
    a fenti kézi `ln -s` opcionális — csak akkor kell, ha bármilyen projektbe telepítés
    előtt szeretnéd elérhetővé tenni a `ctm`-et.)
 
-A teljes parancs-referenciáért lásd a [Gyors indulás](#gyors-indulás) szekciót lentebb.
+A teljes parancs-referenciáért lásd a
+[Gyors indulás](https://github.com/GeRiY/claude-task-manager/blob/main/README.hu.md#gyors-indulás)
+szekciót lentebb.
 
 ## Architektúra dióhéjban
 
 - **`engine/task.sh`** — a tényleges Kanban-motor (jq-alapú, atomikus írás, lock,
   `events.jsonl`-alapú inbox-értesítés). `TM_DIR` env-változóval bármelyik projekt saját
   adat-könyvtárára mutatható. Minden futtatáskor stderr-emlékeztetőt ír, ha a projekt
-  preferált nyelve (a boardról állítva) nem angol — lásd [Nyelv](#nyelv--i18n).
+  preferált nyelve (a boardról állítva) nem angol — lásd
+  [Nyelv](https://github.com/GeRiY/claude-task-manager/blob/main/README.hu.md#nyelv--i18n).
 - **`engine/projects.sh`** — projekt-regisztráló admin CLI: minden regisztrált projekthez
   létrehoz egy `data/<id>/` adat-könyvtárat, és egy `wrappers/<id>.sh` wrappert, ami a
   `TM_DIR`-t és az engine abszolút útját már **beégetve** hordozza.
@@ -87,7 +91,8 @@ A teljes parancs-referenciáért lásd a [Gyors indulás](#gyors-indulás) szekc
   létrehozása egy már telepített projektben.
 - **`engine/check-update.sh`** — az admin-jellegű scriptek (`ctm`, `install.sh`,
   `add-agent.sh`, `projects.sh`) forrásolják be, hogy sárga "van új verzió" jelzést
-  írjanak ki — lásd [Naprakészen tartás](#naprakészen-tartás).
+  írjanak ki — lásd
+  [Naprakészen tartás](https://github.com/GeRiY/claude-task-manager/blob/main/README.hu.md#naprakészen-tartás).
 
 **Fontos:** a `task.sh`-hívásokhoz (agent-munkavégzés) **egyáltalán nem kell docker** — a
 wrapperek sima host-bash scriptek. Kizárólag a böngészős **board** és az **API** fut
@@ -265,3 +270,24 @@ Lásd a `.env.example`-t (a valódi `.env` gitignore-olva van, mert a `ctm` írj
   a böngészőnek.
 - Minden írás-kérésben a `project` id-t a `data/projects.json` regisztrált listája ellen
   ellenőrizzük — a kliens sosem tud tetszőleges könyvtárra mutatni az API-val.
+
+## Közösség és discussion
+
+Kérdések, ötletek és configok helye a
+[**GitHub Discussions**](https://github.com/GeRiY/claude-task-manager/discussions) — ide
+tartozik minden, ami nem konkrét bug (azok az
+[Issues](https://github.com/GeRiY/claude-task-manager/issues) alá valók). Amit érdemes
+hozni:
+
+- **Telepítés és workflow-k** — több-agentes setupok, `ctm init`, és az `--as <agent>`
+  hívási szerződés.
+- **Configok megosztása** — a saját teammate/agent definícióid (`ctm-*` szerepek, egyedi
+  `tm-*` agentek) és stack-adaptációk.
+- **Feature ötletek** — új `task.sh` parancsok, board-fejlesztések, i18n, vagy
+  CI/publikálási újítások.
+- **Használati súrlódások** — homályos doksi, zavaros telepítési lépések, vagy
+  modul-szűrési peremesetek (a valódi bugok → Issues).
+
+Új vagy itt? Köszönj be a
+[welcome threadben](https://github.com/GeRiY/claude-task-manager/discussions/1) — írd meg,
+milyen projekteken koordinálsz agenteket, és mire használod az eszközt.
