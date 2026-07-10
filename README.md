@@ -12,6 +12,11 @@ Code agents (main agent + teammates). One shared browser board, a token-efficien
 `--as <agent>`-based `task.sh` CLI, module filtering, and a bilingual (English/Hungarian)
 UI — callable from any registered project, no docker required for the CLI itself.
 
+> 📖 **New here? Start with the how-to.** A simple, user-facing walkthrough of working
+> with Claude Code on the board — *what to type* (in plain language), through user
+> stories: **[Claude Code + ctm: a simple how-to](https://github.com/GeRiY/claude-task-manager/discussions/3)**
+> ([magyarul](https://github.com/GeRiY/claude-task-manager/discussions/4)).
+
 ## Screenshots
 
 ![Live update: task.sh drives the board through todo → in_progress → review → done in real time](https://raw.githubusercontent.com/GeRiY/claude-task-manager/main/docs/screenshots/demo-live-update.gif)

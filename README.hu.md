@@ -12,6 +12,12 @@ agentek (fő agent + teammate-ek) koordinálásához. Egy közös böngészős b
 token-hatékony, `--as <agent>`-alapú `task.sh` CLI, modul-szűrés, és kétnyelvű
 (angol/magyar) felület — bármelyik regisztrált projektből hívva, a CLI-hez docker nélkül.
 
+> 📖 **Most ismerkedsz vele? Kezdd az útmutatóval.** Egyszerű, felhasználó-nézőpontú
+> bemutató a Claude Code-dal való munkáról a board-on — *mit írj be* (természetes
+> nyelven), user story-kon keresztül:
+> **[Claude Code + ctm: egyszerű használati útmutató](https://github.com/GeRiY/claude-task-manager/discussions/4)**
+> ([in English](https://github.com/GeRiY/claude-task-manager/discussions/3)).
+
 ## Képernyőképek
 
 ![Élő frissítés: a task.sh valós időben vezeti végig a board-ot todo → in_progress → review → done állapotokon](https://raw.githubusercontent.com/GeRiY/claude-task-manager/main/docs/screenshots/demo-live-update.gif)
