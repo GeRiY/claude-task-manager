@@ -5,6 +5,15 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.4] - 2026-07-10
+
+### Added
+- User-facing how-to guides — *"Claude Code + ctm: a simple how-to"* (EN) and *"egyszerű
+  használati útmutató"* (HU) — published as GitHub Discussions and written from the user's
+  perspective: **what to type** to Claude Code in plain language, through user stories
+  (record a task, check status, hand off, unblock, dependencies, review→close, session
+  continuity). Linked prominently near the top of both `README.md` and `README.hu.md`.
+
 ## [1.1.1] - 2026-07-08
 
 ### Fixed
