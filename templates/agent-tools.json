@@ -1,0 +1,18 @@
+{
+  "//": "Tool allow-list baked into each teammate agent's frontmatter at `ctm init` time.",
+  "//default": "Used for any agent name not listed under \"agents\" (incl. most custom tm-* agents).",
+  "//agents": "Per-agent override, keyed by the generated agent name (the base set, or tm-<name> custom).",
+  "//format": "Each value is either a comma-separated string or a JSON array of tool names.",
+  "//override": "A project may override this per-agent by placing its own .claude/agent-tools.json in the target repo (see engine/agent-tools.sh for the precedence).",
+
+  "default": "Read, Write, Edit, Bash, Glob, Grep, SendMessage, mcp__ide__getDiagnostics",
+
+  "//playwright": "playwright-tester needs the Playwright MCP server; without it the agent is installed but can't drive a browser — see the roster note in SKILL.md.",
+
+  "agents": {
+    "backend-dev": "Read, Write, Edit, Bash, Glob, Grep, SendMessage, mcp__ide__getDiagnostics",
+    "frontend-dev": "Read, Write, Edit, Bash, Glob, Grep, SendMessage, mcp__ide__getDiagnostics",
+    "investigator": "Read, Grep, Glob, Bash, SendMessage",
+    "playwright-tester": "Read, Grep, Glob, Bash, SendMessage, mcp__playwright__browser_navigate, mcp__playwright__browser_snapshot, mcp__playwright__browser_click, mcp__playwright__browser_type, mcp__playwright__browser_fill_form, mcp__playwright__browser_select_option, mcp__playwright__browser_press_key, mcp__playwright__browser_hover, mcp__playwright__browser_wait_for, mcp__playwright__browser_take_screenshot, mcp__playwright__browser_console_messages, mcp__playwright__browser_network_requests, mcp__playwright__browser_evaluate, mcp__playwright__browser_tabs, mcp__playwright__browser_resize, mcp__playwright__browser_close"
+  }
+}

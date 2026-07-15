@@ -94,9 +94,23 @@
   </div>
   <span class="sep"></span>
   <span class="lbl" data-i18n="ctrl.module">Module</span>
-  <select id="moduleFilter">
-    <option value="" data-i18n="ctrl.module.all">— all modules —</option>
-  </select>
+  <div class="ms" id="moduleMs">
+    <button type="button" class="ms-btn" id="moduleMsBtn" aria-haspopup="dialog" aria-expanded="false">
+      <span class="ms-btn-lbl" id="moduleMsLabel" data-i18n="ctrl.module.all">All modules</span>
+      <svg class="ms-chev" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"></path></svg>
+    </button>
+    <div class="ms-pop" id="moduleMsPop" role="dialog" aria-label="Module filter" hidden>
+      <div class="ms-search">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"></circle><path d="m21 21-4.3-4.3"></path></svg>
+        <input type="text" id="moduleMsSearch" data-i18n-placeholder="ctrl.module.search" placeholder="Search modules…" autocomplete="off" spellcheck="false">
+      </div>
+      <label class="ms-opt ms-all">
+        <input type="checkbox" id="moduleMsAll">
+        <span data-i18n="ctrl.module.selectAll">Select all</span>
+      </label>
+      <div class="ms-list" id="moduleMsList"></div>
+    </div>
+  </div>
   <span class="sep"></span>
   <span class="lbl" data-i18n="ctrl.quickFilter">Quick filter</span>
   <button id="qfReview" class="qf"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 4h10M7 20h10M8 4v3l4 5 4-5V4M8 20v-3l4-5 4 5v3"></path></svg> <span data-i18n="ctrl.quick.review">Awaiting you</span></button>

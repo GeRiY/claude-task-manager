@@ -81,7 +81,7 @@ export class TaskModal {
       [I18n.t("modal.kv.lastActivity"), t.lastActivityAt ? `${Utils.absTime(t.lastActivityAt)} (${Utils.relTime(t.lastActivityAt)})` : null],
     ].filter(r => r[1] != null && r[1] !== "");
     const depLink = n => { const b = teamIndex.get(n); return `<span class="badge dep-active deplink" data-team="${n}">#${n}${b ? " " + Utils.esc((b.title || "").slice(0, 28)) : ""}</span>`; };
-    // Strukturált kapcsolatok (task.sh dependsOn): mire vár ez a taszk, és mely taszkok várnak rá.
+    // Structured relationships (task.sh dependsOn): what this task waits on, and which tasks wait on it.
     const idIndex = new Map(allTasks.map(x => [x.id, x]));
     const dependsOn = Array.isArray(t.dependsOn) ? t.dependsOn : [];
     const blockRel = allTasks.filter(x => Array.isArray(x.dependsOn) && x.dependsOn.includes(t.id));
@@ -91,6 +91,62 @@ export class TaskModal {
       return `<span class="badge dep-active deplink" data-task="${Utils.esc(id)}" title="${Utils.esc(String(label))}">${pill}${Utils.esc(String(label).slice(0, 44))}</span>`;
     };
     const history = Array.isArray(t.history) ? t.history.slice().sort((a, b) => new Date(a.at) - new Date(b.at)) : [];
+    // Checklist (task.sh checklist feature): small steps under a task that don't deserve
+    // their own task (see engine/task.sh's `checklist` help for the dependsOn/handoff
+    // boundary). Progress ({done}/{total}) is computed here, NOT stored — the task.sh side
+    // deliberately keeps it derived (same reasoning as the dropped durationMs field).
+    const checklist = Array.isArray(t.checklist) ? t.checklist.filter(Boolean) : [];
+    const checklistDone = checklist.filter(c => c.done).length;
+    const checklistItemHTML = c => `<li class="check-item${c.done ? " done" : ""}">
+        <label class="check-label">
+          <input type="checkbox" class="check-toggle" data-item="${Utils.esc(c.id)}"${c.done ? " checked" : ""}${opts.writeEnabled ? "" : " disabled"}>
+          <span class="check-text">${Utils.esc(c.text)}</span>
+        </label>
+        ${opts.writeEnabled ? `<button type="button" class="check-rm" data-item="${Utils.esc(c.id)}" title="${Utils.esc(I18n.t("modal.checklist.rmTitle"))}">✕</button>` : ""}
+      </li>`;
+    // The "add item" row is its own thing (not an .act-input, since it needs its own text
+    // value, not a fixed field) — but the button IS a plain .act-btn, so App's existing
+    // .act-btn click-delegation picks it up for free (data-act="checklist-add").
+    const checklistAddRowHTML = opts.writeEnabled
+      ? `<div class="check-add-row">
+          <input type="text" class="check-add-input" id="checkAddInput" placeholder="${Utils.esc(I18n.t("modal.checklist.addPlaceholder"))}">
+          <button type="button" class="act-btn check-add-btn" data-act="checklist-add">${Utils.esc(I18n.t("modal.checklist.addBtn"))}</button>
+        </div>`
+      : "";
+    // Backward compat / the empty+writable-vs-empty+read-only distinction: an empty checklist
+    // renders NOTHING when read-only (matches every pre-existing task in data/ — no field at
+    // all), but shows just the add row when writable (otherwise a checklist could never be
+    // STARTED from the UI). A non-empty checklist always gets its full heading + list.
+    const checklistHTML = checklist.length
+      ? `<h4>${Utils.esc(I18n.t("modal.checklist", { done: checklistDone, total: checklist.length }))}</h4><ul class="checklist">${checklist.map(checklistItemHTML).join("")}</ul>${checklistAddRowHTML}`
+      : checklistAddRowHTML;
+    // Affected files (task.sh files field, absolute paths): for display, we strip
+    // everything before the project root — the project id (opts.project, the id field
+    // in data/projects.json) matches the source repo's folder name, so we look for the
+    // first path segment with that name (the project root), and show the path relative
+    // to it, with a leading /. A later segment with the same name is inside the project
+    // itself (e.g. a vendor folder of the same name), so it stays part of the path.
+    // The full path (title attribute + data-copy → clipboard) is always unchanged;
+    // if the id doesn't appear as a standalone segment in the path at all, there's no shortening.
+    const files = Array.isArray(t.files) ? t.files.filter(Boolean) : [];
+    const projectId = opts.project || "";
+    const fileLabel = f => {
+      if (!projectId) return f;
+      const segs = f.split("/");
+      const idx = segs.indexOf(projectId);
+      return idx >= 0 ? "/" + segs.slice(idx + 1).join("/") : f;
+    };
+    // File-list rendering (copy-id button + shortened label + full path in the title/clipboard)
+    // is SHARED between the task-level "Files" section and the note-/history-level (task.sh
+    // by/files feature) 'files' display — don't duplicate the markup.
+    const filesListHTML = arr => `<ul class="files">${arr.map(f => `<li><button type="button" class="copy-id file-path" data-copy="${Utils.esc(f)}" title="${Utils.esc(f)}">${Utils.esc(fileLabel(f))}</button></li>`).join("")}</ul>`;
+    // Subordinate (note/history-level) files block: only renders when the array is actually
+    // non-empty — for old entries (without by/files) it stays silent, so the modal looks
+    // exactly as it did before.
+    const subFilesHTML = raw => {
+      const arr = Array.isArray(raw) ? raw.filter(Boolean) : [];
+      return arr.length ? `<div class="sub-files"><span class="lbl">${Utils.esc(I18n.t("modal.files", { n: arr.length }))}</span>${filesListHTML(arr)}</div>` : "";
+    };
 
     this.dom.mBody.innerHTML =
       this.actionsHTML(t, opts) +
@@ -106,16 +162,32 @@ export class TaskModal {
       ((dependsOn.length || blockRel.length) ? `<h4>${Utils.esc(I18n.t("modal.relations"))}</h4>` : "") +
       (dependsOn.length ? `<div class="row"><span class="lbl">${Utils.esc(I18n.t("rel.dependsOn"))}</span> <span class="deplinks">${dependsOn.map(relLink).join("")}</span></div>` : "") +
       (blockRel.length ? `<div class="row"><span class="lbl">${Utils.esc(I18n.t("rel.blocks"))}</span> <span class="deplinks">${blockRel.map(x => relLink(x.id)).join("")}</span></div>` : "") +
+      checklistHTML +
+      (files.length ? `<h4>${Utils.esc(I18n.t("modal.files", { n: files.length }))}</h4>${filesListHTML(files)}` : "") +
       `<h4>${Utils.esc(I18n.t("modal.data"))}</h4><dl class="kv">${kv.map(([k, v]) => `<dt>${Utils.esc(k)}</dt><dd>${Utils.esc(v)}${k === I18n.t("modal.kv.id") ? ` <button type="button" class="copy-id" data-copy="${Utils.esc(v)}" title="${Utils.esc(I18n.t("modal.copyIdTitle"))}">${Utils.esc(I18n.t("modal.copyId"))}</button>` : ""}</dd>`).join("")}</dl>` +
       (notes.length ? `<h4>${Utils.esc(I18n.t("modal.notes", { n: notes.length }))}</h4><ul class="notes">${notes.map(n => {
+        // <details>/<summary>: collapsed by default (a note's text can run to several
+        // thousand characters), the summary is informative even collapsed (kind-badge +
+        // one-line preview + relative time). The preview is clipped with CSS ellipsis (not
+        // truncated in JS), so once opened the n-text shows the full, untruncated text.
         const k = Utils.noteKind(n.text);
-        const top = (k || n.at) ? `<div class="n-top">${k ? `<span class="n-kind ${k.cls}">${Utils.esc(k.label)}</span>` : ""}${n.at ? `<span class="n-when" title="${Utils.esc(Utils.absTime(n.at))}">${Utils.esc(Utils.relTime(n.at))}</span>` : ""}</div>` : "";
-        return `<li class="note-item">${top}<div class="n-text">${Utils.esc(n.text)}</div></li>`;
+        const when = n.at ? `<span class="n-when" title="${Utils.esc(Utils.absTime(n.at))}">${Utils.esc(Utils.relTime(n.at))}</span>` : "";
+        // 'by' (task.sh by/files feature): only when there IS a value — old notes have no by
+        // field, and there this span simply drops out (not "undefined", not an empty badge).
+        const by = n.by ? `<span class="tag agent n-by">${Utils.esc(n.by)}</span>` : "";
+        return `<li><details class="note-item">
+          <summary><span class="n-top">${k ? `<span class="n-kind ${k.cls}">${Utils.esc(k.label)}</span>` : ""}<span class="n-preview">${Utils.esc(n.text)}</span><span class="n-meta">${by}${when}</span></span></summary>
+          <div class="n-text">${Utils.esc(n.text)}</div>
+          ${subFilesHTML(n.files)}
+        </details></li>`;
       }).join("")}</ul>` : "") +
       (history.length ? `<h4>${Utils.esc(I18n.t("modal.history", { n: history.length }))}</h4><ul class="timeline">${history.map(h => {
         const from = h.fromStatus ? `<span class="pill${Utils.pillClass(h.fromStatus)}" style="background:${COLOR[h.fromStatus] || "var(--muted)"}">${Utils.esc(h.fromStatus)}</span> → ` : "";
         const to = h.toStatus ? `<span class="pill${Utils.pillClass(h.toStatus)}" style="background:${COLOR[h.toStatus] || "var(--muted)"}">${Utils.esc(h.toStatus)}</span>` : "";
-        return `<li><div class="when">${Utils.esc(Utils.absTime(h.at))} · ${Utils.esc(Utils.relTime(h.at))}</div><div class="trans">${Utils.esc(h.type || "")} ${from}${to}</div>${h.note ? `<div class="note2">${Utils.esc(h.note)}</div>` : ""}</li>`;
+        // 'by' (task.sh by/files feature): only when there IS a value — old history entries
+        // have no by field, and there the " · name" part simply drops out.
+        const by = h.by ? ` · ${Utils.esc(h.by)}` : "";
+        return `<li><div class="when">${Utils.esc(Utils.absTime(h.at))} · ${Utils.esc(Utils.relTime(h.at))}${by}</div><div class="trans">${Utils.esc(h.type || "")} ${from}${to}</div>${h.note ? `<div class="note2">${Utils.esc(h.note)}</div>` : ""}${subFilesHTML(h.files)}</li>`;
       }).join("")}</ul>` : "");
   }
 

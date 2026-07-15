@@ -101,7 +101,11 @@ Most common commands (always call with the FULL absolute path — copy it as sho
 - `__TASK_SH_PATH__ get <id> --as main` — the full JSON of a SINGLE task (not the whole file).
 - `__TASK_SH_PATH__ add <id> <title> [desc] --as main` — a new task with `todo` status, with all required fields.
 - `__TASK_SH_PATH__ status <id> <status> [note] --as main` — status change + history entry.
-- `__TASK_SH_PATH__ note <id> <text> --as main` — append a note.
+- `__TASK_SH_PATH__ note <id> <text> --as main` — append a note. Start it with an ALL-CAPS
+  keyword + `:` and the board shows a colored phase badge on the note (and on the card): e.g.
+  `RESEARCH`/`KUTATÁS`, `PLAN`/`TERV`, `DECISION`/`DÖNTÉS`, `IMPL`/`FIX`/`REFACTOR`,
+  `DONE`/`KÉSZ`, `BLOCK`/`BLOKK`, `WARNING`/`FIGYELEM`, `VERIFIED`/`TEST`, `USER`, `HANDOFF`.
+  Free text works too (neutral badge) — the keyword is what makes a long note scannable.
 - `__TASK_SH_PATH__ set <id> <field> <json-value> --as main` — set an arbitrary field (quote strings like `'"main"'`).
 - `__TASK_SH_PATH__ find <text> --as main` — and likewise: `… history <id>`, `… ids`, `… archive|unarchive|rm <id>`.
 
@@ -111,9 +115,16 @@ Most common commands (always call with the FULL absolute path — copy it as sho
 - `… tag <id> <add|rm> <tag>` — tags (e.g. `frontend`/`backend`/`test`).
 - `… module <id> <area>` — functional-area label (`assignedModule`), e.g. `event-edit`/`billing`; free text, empty string clears it. A separate axis from the work-type `tag`; filter with `list --module <area>`.
 - `… assign <id> <agent>` — sets `assignedAgentId` (more convenient than `set` for claiming). Use the **stripped identity** from the roster below, NOT the `ctm-`/`tm-` launch name.
+- `… claim <id>` — **atomic, race-safe** take: flips a `todo` to `in_progress` AND assigns it to the `--as` caller in one locked write; refuses if another agent already claimed it (prevents two agents double-working the same task). Teammates use this to pick up work.
+- `… handoff <id> <to> [note]` — reassign to `<to>` AND send them a **directed** inbox ping (`‼️`). The explicit way to route a finding/bug/sub-task to another teammate.
+- `… review <id> [reviewer=main] [note]` — move to `review` AND route it to a reviewer (assigns them + pings their inbox), so review has an owner instead of silting up. Teammates close their part with this instead of a bare `status … review`.
+- `… review-queue [reviewer]` — tasks in `review` (oldest first) with age; optionally just one reviewer's queue. Main's "what's waiting for my sign-off" view.
+- `… stale [--older-than 24h] [status...]` — held-but-idle tasks (default `in_progress`+`review`) past a threshold, by `lastActivityAt`. Surfaces stuck/forgotten work to re-route.
+- `… files <id> [add|rm <abs-path>...]` — the source files a task touches (absolute paths, unique; no sub-op lists them). A standard duty on every task — the machine-readable pointer to the change, kept out of the free-text note.
+- `… checklist <id> [add <text>...|done <item-id>...|undo <item-id>...|rm <item-id>...]` — the small steps INSIDE a task (no sub-op lists them). **You (main) write the items; teammates only tick them off** — see the workflow below. Items get a stable `c<n>` id, never reused. Use it for steps that don't deserve their own task — a real sub-task belongs in `dep`/`handoff` instead. Marking a task `done` with unchecked items warns but doesn't block; ticking the last item does NOT change the status by itself.
 - `… dep <id> <add|rm> <other-id>` — dependency (`dependsOn`): `id` waits on `other-id`; includes cycle and existence checks.
 - `… deps <id>` — what this task is waiting on and what it blocks.
-- `… next` — the next recommended `todo` task (no open dependency), sorted by priority.
+- `… next [--claim]` — the next recommended `todo` task (no open dependency), sorted by priority. `--claim` atomically takes it (see `claim`).
 - `… list [status] --tag <t> --agent <a> --priority <p> --module <m> --all --json` — filtered/machine-readable list.
 - `… status-many <status> <id...>` — move multiple tasks to one status in a SINGLE atomic write.
 - `… reopen <id> [status]` — reopen a closed/archived task.
@@ -136,7 +147,7 @@ commands) — never with `Write`/`Edit`:
 - An open question arises / is resolved → `ctx-question add|rm "<text>" --as main`.
 - The active focus changes → `ctx-set currentFocus '"<task-id or text>"' --as main`.
 
-At the start of every session, **read `task.sh ctx` first**, and let it guide the work.
+At the start of every session, **read `__TASK_SH_PATH__ ctx` first**, and let it guide the work.
 
 ## Roles — the main agent coordinates, teammates execute
 
@@ -163,35 +174,62 @@ result, and decides the `review → done | assign+todo` handoff.
   When unsure, prefer `sonnet`. **Never use `opus`, `fable`/`claude-fable-5`** — teammates
   run only on `haiku` or `sonnet`.
 
-### Teammate roster — assign identity ≠ launch name
+### Teammate roster — the base set
 
-The Agent **launch name** (`subagent_type`, prefixed `ctm-`/`tm-`) is NOT the task-manager
-identity. When you `assign`, always use the **stripped identity** below — it must exactly
-match the teammate's own `--as` / "which tasks are mine" filter, or the task sits unclaimed.
+For the base agents the **launch name (`subagent_type`) and the task-manager identity
+(`assign` / `--as`) are the SAME string** — there is nothing to strip or translate:
 
-| Launch name (subagent_type) | `assign` / `--as` identity |
+| Agent | Use it for |
 |---|---|
-| `ctm-frontend-developer`    | `frontend-developer` |
-| `ctm-backend-developer`     | `backend-developer` |
-| `ctm-code-investigator`     | `code-investigator` |
+| `backend-dev`       | backend work |
+| `frontend-dev`      | frontend work |
+| `investigator`      | read-only code investigation; usually first in the chain |
+| `playwright-tester` | verifying behavior in a real browser; usually last in the chain |
 
-The project may also ship `tm-*` variants with their **own** stripped identities (e.g.
-`tm-frontend` → `frontend`) — check the `--as` line inside each `tm-*` agent before
-assigning, and don't mix a `ctm-*` identity with a `tm-*` one.
+**`playwright-tester` is environment-dependent:** it can only do its job where the Playwright
+MCP server is available. If it isn't, don't launch it — do the verification yourself, or hand
+it to the human, and say which it was. Never let a task pass as "verified" because the agent
+that would have checked it couldn't run.
+
+The project may also ship `tm-*` variants — their identity is the name WITHOUT the `tm-`
+prefix (e.g. `tm-frontend` → `frontend`), so check the `--as` line inside each `tm-*` agent
+before assigning. **Watch for identity collisions:** two agents that claim tasks under the same
+`--as` name will fight over the same queue. `ctm agent add` refuses the base names for exactly
+this reason, but a hand-written agent definition can still collide — if a task keeps getting
+picked up by the wrong teammate, that's the first thing to check.
+
+### How many teammates to run
+
+**Run 3-4 teammates at a time — no more — and keep feeding them.** The right default is the
+base set: `investigator`, `backend-dev`, `frontend-dev`, plus `playwright-tester` where the
+environment allows it. This is a limit on CONCURRENCY, not on total work: a teammate that
+finishes its task stays alive and takes the next one.
+
+- **Don't stop a teammate to start another.** Spawning is expensive and throws away everything
+  it has learned about the codebase. Send it the next task instead.
+- **Feed them, don't batch them.** When a teammate reports back, give it the next task right
+  away rather than waiting for the others to finish. A blocked teammate is idle capacity.
+- **More than 4 in parallel ONLY if the user asks for it.** Beyond that the coordination cost
+  (routing, review, merge conflicts on the same files) grows faster than the throughput, and
+  two teammates editing the same file will undo each other's work.
+- **Fewer is fine.** If the work is one-dimensional, one teammate is the right number — don't
+  spawn a frontend-dev for a task with no frontend in it.
 
 ## Required workflow
 
 Every step goes through `task.sh` (never a direct JSON write). **Add `--as main` to
 every non-meta command** (as the main agent); a teammate uses its own `--as <name>`:
 
-1. Before handling an actionable request, `task.sh summary --as main` / `list … --as main`.
-2. At session start, `task.sh ctx --as main`; if missing, `ctx-init "<initPrompt>" "<goal>" --as main`.
-3. If the last user message is actionable and there's no active task for it, immediately `task.sh add <id> "<title>" "<desc>" --as main`. On add, set **priority** only when it isn't ordinary — `… priority <id> high|urgent --as main` for blockers or user-flagged urgency (`normal` is the default; don't set it explicitly). This is what makes a teammate's `next` pick the right task first. Optionally label the **functional area** with `… module <id> <area> --as main` when filtering the board by area (`list --module <area>`) is useful — a separate axis from the `frontend`/`backend` work-type tags.
-4. Before starting work, the task should be `todo`, or run `task.sh status <id> in_progress --as main`.
-5. If the work cannot proceed, `task.sh status <id> blocked "<reason>" --as main`.
-6. When done, `task.sh status <id> done --as main`.
-7. If user review/confirmation is needed, `task.sh status <id> review --as main`.
-8. `task.sh` writes every mutation atomically and maintains the timestamp/history — manually
+1. Before handling an actionable request, `__TASK_SH_PATH__ summary --as main` / `list … --as main`.
+2. At session start, `__TASK_SH_PATH__ ctx --as main`; if missing, `ctx-init "<initPrompt>" "<goal>" --as main`.
+3. If the last user message is actionable and there's no active task for it, immediately `__TASK_SH_PATH__ add <id> "<title>" "<desc>" --as main`. On add, set **priority** only when it isn't ordinary — `… priority <id> high|urgent --as main` for blockers or user-flagged urgency (`normal` is the default; don't set it explicitly). This is what makes a teammate's `next` pick the right task first. Optionally label the **functional area** with `… module <id> <area> --as main` when filtering the board by area (`list --module <area>`) is useful — a separate axis from the `frontend`/`backend` work-type tags.
+4. **When the task breaks into steps, record them as a checklist ON the task — this is main's job, not the teammate's.** You are the one who planned the work; a teammate that has to invent the steps has already lost the plan. Write them at `add` time (or as soon as the breakdown is clear), and the teammate then just ticks them off as it goes, so progress is visible while the work is running rather than only in the closing note. Keep the boundary: a step that needs its own owner or status is a TASK (`add` + `handoff`), not a checklist item.
+   `__TASK_SH_PATH__ checklist <id> add "extend the save service" "add the route" "wire up the form" --as main`
+5. Before starting work, the task should be `todo`, or run `__TASK_SH_PATH__ status <id> in_progress --as main`.
+6. If the work cannot proceed, `__TASK_SH_PATH__ status <id> blocked "<reason>" --as main`.
+7. When done, `__TASK_SH_PATH__ status <id> done --as main`. With unchecked checklist items left, this warns on stderr but still goes through — either tick them, remove the ones that turned out unnecessary, or accept the warning knowingly.
+8. If user review/confirmation is needed, `__TASK_SH_PATH__ status <id> review --as main`.
+9. `task.sh` writes every mutation atomically and maintains the timestamp/history — manually
    writing back the full JSON is unnecessary and forbidden.
 
 ## Status rules

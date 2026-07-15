@@ -54,6 +54,37 @@ VALID_PRIORITIES="low normal high urgent"
 # emit_event writes this as `by`; inbox uses it to filter out the caller's own echo.
 ACTOR=""
 
+# --- Shared jq fragments: by / files, used by every note- and status-transition writer ------
+# Centralized here so the rule lives in ONE place instead of being copy-pasted into every call
+# site that needs it (cmd_add's initial history entry, cmd_status, _try_claim, cmd_review,
+# cmd_reopen, cmd_status_many, cmd_note, cmd_handoff).
+#
+# JQ_BY: null-safe 'by' value. Every caller MUST also pass --arg actor "$ACTOR".
+JQ_BY='(if $actor=="" then null else $actor end)'
+#
+# JQ_NOTE_FILES: a note's own 'files' — the task's CURRENT files minus every file already
+# "claimed" by an earlier note (each file is assigned to AT MOST ONE note — claim-once). Assumes
+# '.' is the task object, evaluated BEFORE the new note is appended (so .files/.notes still
+# reflect the pre-append state).
+# LIMITATION (accepted, not a bug — see the by/files task discussion): `files rm <path>`
+# followed by `files add <path>` does NOT reopen <path> for claiming — it stays "claimed" by
+# whichever earlier note claimed it before the removal, so a later note's delta will not include
+# it again. A per-file add-timestamp would fix this, but would turn `files` from a plain string
+# array into an object array — a bigger backward-compatibility break than this rare corrective
+# case (files rm) warrants.
+JQ_NOTE_FILES='((.files // []) - ((.notes // []) | map(.files // []) | add // []))'
+#
+# JQ_TRANSITION_FILES: the files "claimed" by note(s) since the LAST real status transition —
+# deliberately TIMESTAMP-FREE. now_iso() only has second resolution, so comparing timestamps
+# could silently drop a note written in the same wall-clock second as the previous transition —
+# a common case, since an agent's files-add -> note -> status sequence often completes within a
+# single second. Formula: unique( union(ALL note.files) - union(ALL PREVIOUS history entries'
+# .files) ). This works BECAUSE note.files is claim-once (see JQ_NOTE_FILES above): every file
+# belongs to at most one note, so subtracting everything already attributed to a past transition
+# leaves exactly the notes' files written since that transition — no clock involved. Assumes '.'
+# is the task object, evaluated BEFORE the new history entry is appended.
+JQ_TRANSITION_FILES='((((.notes // []) | map(.files // []) | add // []) - (((.history // []) | map(.files // []) | add) // [])) | unique)'
+
 # ---------------------------------------------------------------------------
 # Helper functions
 # ---------------------------------------------------------------------------
@@ -151,12 +182,14 @@ task_exists() {
 }
 
 # --- Event feed (inbox) ----------------------------------------------------
-# One line in events.jsonl: {seq, at, by, task, kind, text}. `seq` monotonically increases
-# (the file's line count + 1, consistent under the lock). `by` is the calling agent (ACTOR).
+# One line in events.jsonl: {seq, at, by, task, kind, text} (+ optional `to` for a directed
+# message). `seq` monotonically increases (the file's line count + 1, consistent under the
+# lock). `by` is the calling agent (ACTOR). The optional 4th argument addresses the event to a
+# specific agent (handoff / review-request): inbox highlights events whose `to` is the reader.
 # Only mutations call this; queries do not generate events. Swallows errors: notification is
 # best-effort and should never fail a task operation.
 emit_event() {
-  local task="$1" kind="$2" text="${3:-}"
+  local task="$1" kind="$2" text="${3:-}" to="${4:-}"
   [[ -n "$ACTOR" ]] || return 0
   local now; now="$(now_iso)"
   acquire_lock
@@ -164,8 +197,9 @@ emit_event() {
   touch "$EVENTS_FILE" 2>/dev/null || true
   local seq; seq=$(( $(wc -l < "$EVENTS_FILE" 2>/dev/null || echo 0) + 1 ))
   jq -cn --argjson seq "$seq" --arg at "$now" --arg by "$ACTOR" \
-     --arg task "$task" --arg kind "$kind" --arg text "$text" \
-     '{seq:$seq, at:$at, by:$by, task:$task, kind:$kind, text:$text}' \
+     --arg task "$task" --arg kind "$kind" --arg text "$text" --arg to "$to" \
+     '{seq:$seq, at:$at, by:$by, task:$task, kind:$kind, text:$text}
+      + (if $to=="" then {} else {to:$to} end)' \
      >> "$EVENTS_FILE" 2>/dev/null || true
   release_lock
 }
@@ -235,7 +269,11 @@ QUERIES (non-mutating, terse output)
   field <id> <field>       The raw value of one field of one task
   summary                  Count by status + total
   find <text>              Title/description search (case-insensitive), terse list
-  next                     Next recommended todo (no open dependency), by priority
+  next [--claim]           Next recommended todo (no open dependency), by priority.
+                           --claim atomically takes the top ready todo (-> in_progress, you)
+  review-queue [reviewer]  Tasks in review (oldest first) with age; optionally one reviewer's
+  stale [--older-than 24h] [status...]
+                           Held-but-idle tasks (default in_progress+review) past the threshold
   deps <id>                What this task waits on and what it blocks (dependency view)
   history <id>             One task's history entries, terse
   validate                 Schema check (required fields, status, priority, broken
@@ -250,14 +288,35 @@ MUTATIONS (atomic write under mkdir-lock; timestamp + history auto-maintained; p
   status-many <status> <id...>
                            Set multiple tasks to one status, in ONE atomic write
   reopen <id> [status]     Reopen a closed/archived task (default: todo) with history
-  note <id> <text>         Append a note to the notes array ({at,text})
+  note <id> <text>         Append a note ({at,text,by,files}). ALL-CAPS prefix + ':' gets a
+                           colored kind-badge on the board: KUTATÁS/RESEARCH, TERV/PLAN,
+                           DÖNTÉS/DECISION, IMPL/JAVÍTÁS/FIX/REFAKTOR/REFACTOR, KÉSZ/DONE,
+                           BLOKK/BLOCK, FIGYELEM/WARNING, VERIFIKÁLVA/VERIFIED/TESZT/TEST, USER,
+                           ÁTADÁS/HANDOFF (keep this list in sync with js/Utils.js's
+                           NOTE_KIND_STEMS). Plain text works too.
+                           e.g. task.sh note fix-login "KÉSZ: export route javítva" --as backend
   priority <id> <low|normal|high|urgent>
                            Set priority
   tag <id> <add|rm> <tag>
                            Add/remove a label (tags array, unique)
+  checklist <id> [add <text>... | done|undo|rm <item-id>...]
+                           Checklist/todo items under a task — small steps that don't deserve
+                           their own task (no owner, status, or board card). For a real,
+                           independent unit of work, use `add`+`dep`/`handoff` instead. No
+                           sub-op: list them. Stable ids (c1, c2, ...), never reused.
+  files <id> [add|rm <abs-path>...]
+                           Record the source files a task touches (absolute paths, unique).
+                           No sub-op: list them. This is a standard duty when working a task.
   module <id> <module>     Set the module/area label (assignedModule) — free text,
                            empty string clears it. Use `list --module <m>` to filter.
   assign <id> <agent>      Set assignedAgentId (more convenient than `set` for claiming)
+  claim <id> [agent]       Atomically take a 'todo' -> in_progress + assign to you (the --as
+                           caller). Fails if already claimed — race-safe, no double-work.
+  handoff <id> <to> [note] Reassign to <to> and send them a directed inbox ping (‼️). The
+                           explicit way to route a finding/bug to another agent.
+  review <id> [reviewer=main] [note]
+                           Move to review AND route it to <reviewer> (queue + directed ping),
+                           so review has an owner instead of silting up.
   dep <id> <add|rm> <other-id>
                            Dependency (dependsOn): 'id' waits on 'other-id'; cycle- and
                            existence-checked
@@ -289,6 +348,12 @@ EXAMPLES (--as is required for every non-meta command)
   task.sh list --module auth --as main
   task.sh dep deploy add fix-login --as main   # deploy waits on fix-login
   task.sh next --as main                       # what should I do next?
+  task.sh next --claim --as backend            # take the top ready todo, race-safe
+  task.sh claim fix-login --as backend         # take a specific todo -> in_progress
+  task.sh handoff fix-login backend "404 on the export route, no entryPass" --as playwright-test
+  task.sh review fix-login main "done, please review" --as backend
+  task.sh review-queue main --as main          # what's waiting for my sign-off
+  task.sh stale --older-than 24h --as main     # stuck in_progress/review tasks
   task.sh status fix-login in_progress "started" --as backend-auth
   task.sh status-many done fix-login deploy --as main
   task.sh inbox backend-auth                    # (meta: no --as) fresh events
@@ -327,8 +392,11 @@ cmd_list() {
     | select($prio=="" or ((.priority//"normal")==$prio))
     | select($module=="" or ((.module//"")==$module))'
   if [[ $as_json == 1 ]]; then
+    # checklist here is a progress SUMMARY ({done,total}), not the full array: the full item
+    # texts would be noisy across a bulk task listing, but the counts are cheap and immediately
+    # useful for a board progress indicator. Use `checklist <id>` for the actual items.
     jq --arg status "$status" --arg tag "$tag" --arg agent "$agent" --arg prio "$prio" --arg module "$module" --argjson all "$show_all" \
-      "[ $flt | {id, status, title, priority:(.priority//\"normal\"), module:(.module//\"\"), tags:(.tags//[]), assignedAgentId, dependsOn:(.dependsOn//[])} ]" \
+      "[ $flt | {id, status, title, priority:(.priority//\"normal\"), module:(.module//\"\"), tags:(.tags//[]), assignedAgentId, dependsOn:(.dependsOn//[]), files:(.files//[]), checklist:{done:((.checklist//[])|map(select(.done))|length), total:((.checklist//[])|length)}} ]" \
       "$TASKS_FILE"
   else
     jq -r --arg status "$status" --arg tag "$tag" --arg agent "$agent" --arg prio "$prio" --arg module "$module" --argjson all "$show_all" \
@@ -405,7 +473,11 @@ cmd_add() {
   local id="$1" title="$2" desc="${3:-}"
   task_exists "$id" && die "a task with this id already exists: $id"
   local now; now="$(now_iso)"
-  apply_jq --arg id "$id" --arg title "$title" --arg desc "$desc" --arg now "$now" '
+  # checklistSeq: an internal, monotonically-increasing counter for checklist item ids (c1,
+  # c2, ...) — see cmd_checklist()'s "add" case for why this can't just be derived from the
+  # current checklist array's length/max (deleting the highest-numbered item must not free its
+  # number for reuse; the counter survives deletions, the array doesn't).
+  apply_jq --arg id "$id" --arg title "$title" --arg desc "$desc" --arg now "$now" --arg actor "$ACTOR" '
     .updatedAt = $now
     | .tasks += [{
         id: $id,
@@ -427,9 +499,12 @@ cmd_add() {
         externalThreadId: null,
         lastActivityAt: $now,
         notes: [],
+        files: [],
+        checklist: [],
+        checklistSeq: 0,
         isArchived: false,
         isInferred: false,
-        history: [ { at: $now, type: "created", note: "Task created.", fromStatus: null, toStatus: "todo" } ]
+        history: [ { at: $now, type: "created", note: "Task created.", fromStatus: null, toStatus: "todo", by: '"$JQ_BY"', files: [] } ]
       }]'
   emit_event "$id" "created" "$title"
   echo "added: $id [todo]"
@@ -443,14 +518,28 @@ cmd_status() {
   is_valid_status "$new" || die "invalid status: $new (valid: $VALID_STATUSES)"
   local now; now="$(now_iso)"
   local notval="null"; [[ -n "$note" ]] && notval="\$note"
-  apply_jq --arg id "$id" --arg new "$new" --arg now "$now" --arg note "$note" "
+  # by/files: see the JQ_BY / JQ_TRANSITION_FILES definitions near the top of the file (the
+  # user's explicit choice — the note ties the file to the status, not directly to task.files).
+  apply_jq --arg id "$id" --arg new "$new" --arg now "$now" --arg note "$note" --arg actor "$ACTOR" "
     .updatedAt = \$now
     | (.tasks[] | select(.id==\$id)) |= (
-        .history += [ { at: \$now, type: \"status_changed\", note: $notval, fromStatus: .status, toStatus: \$new } ]
+        .history += [ { at: \$now, type: \"status_changed\", note: $notval, fromStatus: .status, toStatus: \$new, by: $JQ_BY, files: $JQ_TRANSITION_FILES } ]
         | .status = \$new
         | .updatedAt = \$now
         | .lastActivityAt = \$now
       )"
+  # Warn (never block) when closing a task that still has open checklist items — the
+  # user's explicit call: the checklist is a lightweight helper, not a gate, and the agent
+  # decides when a task is actually done. Same throttled-stderr-notice style as
+  # maybe_notify_update()'s update banner, just unconditional (no TTL — this is a one-off
+  # per status call, not a hot-path repeat).
+  if [[ "$new" == "done" ]]; then
+    local open_items
+    open_items="$(jq -r --arg id "$id" '[.tasks[]|select(.id==$id)|(.checklist//[])[]|select(.done|not)]|length' "$TASKS_FILE")"
+    if [[ "${open_items:-0}" -gt 0 ]]; then
+      printf '\033[33m[task-manager] %s has %s unchecked checklist item(s) — marked done anyway.\033[0m\n' "$id" "$open_items" >&2
+    fi
+  fi
   emit_event "$id" "status:$new" "$note"
   echo "status: $id -> $new"
 }
@@ -461,10 +550,14 @@ cmd_note() {
   local id="$1" text="$2"
   task_exists "$id" || die "no such task: $id"
   local now; now="$(now_iso)"
-  apply_jq --arg id "$id" --arg text "$text" --arg now "$now" '
+  # by/files: see the JQ_BY / JQ_NOTE_FILES definition (+ the rationale for the files-rm
+  # restriction) near the top of the file — this way a `files add` -> `note` session ties in
+  # the files picked up along the way without a parameter.
+  apply_jq --arg id "$id" --arg text "$text" --arg now "$now" --arg actor "$ACTOR" '
     .updatedAt = $now
     | (.tasks[] | select(.id==$id)) |= (
-        .notes += [ { at: $now, text: $text } ]
+        '"$JQ_NOTE_FILES"' as $delta
+        | .notes += [ { at: $now, text: $text, by: '"$JQ_BY"', files: $delta } ]
         | .updatedAt = $now
         | .lastActivityAt = $now
       )'
@@ -567,6 +660,131 @@ cmd_tag() {
   emit_event "$id" "tag:$op" "$t"
 }
 
+cmd_files() {
+  require_tasks_file
+  [[ $# -ge 1 ]] || die "usage: files <id> [add|rm <abs-path>...]"
+  local id="$1"; shift || true
+  task_exists "$id" || die "no such task: $id"
+  # No sub-op: just list the task's files, one per line.
+  if [[ $# -eq 0 ]]; then
+    jq -r --arg id "$id" '.tasks[]|select(.id==$id)|(.files//[])[]' "$TASKS_FILE"
+    return 0
+  fi
+  local op="$1"; shift || true
+  [[ $# -ge 1 ]] || die "usage: files <id> <add|rm> <abs-path> [abs-path...]"
+  local paths_json now; now="$(now_iso)"
+  case "$op" in
+    add)
+      # Enforce absolute paths — the field is a stable, machine-usable pointer to the touched
+      # source files (see the agent workflow), so relative paths (caller-cwd dependent) are out.
+      local p
+      for p in "$@"; do [[ "$p" == /* ]] || die "files add: not an absolute path: $p"; done
+      paths_json="$(printf '%s\n' "$@" | jq -R . | jq -s .)"
+      apply_jq --arg id "$id" --argjson add "$paths_json" --arg now "$now" '
+        .updatedAt=$now
+        | (.tasks[]|select(.id==$id)) |= (.files = (((.files//[]) + $add) | unique) | .updatedAt=$now | .lastActivityAt=$now)'
+      emit_event "$id" "files:add" "$*"
+      echo "files added: $id (+$#)" ;;
+    rm)
+      paths_json="$(printf '%s\n' "$@" | jq -R . | jq -s .)"
+      apply_jq --arg id "$id" --argjson del "$paths_json" --arg now "$now" '
+        .updatedAt=$now
+        | (.tasks[]|select(.id==$id)) |= (.files = ((.files//[]) - $del) | .updatedAt=$now | .lastActivityAt=$now)'
+      emit_event "$id" "files:rm" "$*"
+      echo "files removed: $id (-$#)" ;;
+    *) die "unknown files operation: $op (add|rm)" ;;
+  esac
+}
+
+# Checklist item shape: {id, text, done, addedAt, addedBy, doneAt, doneBy}. This is deliberately
+# NOT the same thing as `dependsOn` (a real, independent task waiting on another) or `handoff`
+# (reassigning ownership) — a checklist item never gets its own status, owner, or board card;
+# it's for small steps within a task that don't deserve any of that. If a "step" needs its own
+# owner/status/history, it should be a separate task (`add` + `dep`), not a checklist item.
+cmd_checklist() {
+  require_tasks_file
+  [[ $# -ge 1 ]] || die "usage: checklist <id> [add <text>... | done|undo|rm <item-id>...]"
+  local id="$1"; shift || true
+  task_exists "$id" || die "no such task: $id"
+  # No sub-op: list the items, one per line: "<item-id> [x|ready] <text>".
+  if [[ $# -eq 0 ]]; then
+    jq -r --arg id "$id" '
+      .tasks[]|select(.id==$id)|(.checklist//[])[]
+      | "\(.id)\t\(if .done then "[x]" else "[ ]" end)\t\(.text)"
+    ' "$TASKS_FILE" | column -t -s $'\t'
+    return 0
+  fi
+  local op="$1"; shift || true
+  [[ $# -ge 1 ]] || die "usage: checklist <id> <add|done|undo|rm> <arg> [arg...]"
+  local now; now="$(now_iso)"
+  case "$op" in
+    add)
+      local texts_json; texts_json="$(printf '%s\n' "$@" | jq -R . | jq -s .)"
+      # Single atomic write for all the items in this call (same "one write, not N" idiom as
+      # status-many): new ids are assigned from checklistSeq, which is bumped by the same amount.
+      apply_jq --arg id "$id" --argjson texts "$texts_json" --arg now "$now" --arg actor "$ACTOR" '
+        .updatedAt=$now
+        | (.tasks[]|select(.id==$id)) |= (
+            (.checklistSeq // 0) as $start
+            | ($texts | to_entries | map({
+                id: ("c" + (($start + .key + 1)|tostring)),
+                text: .value,
+                done: false,
+                addedAt: $now,
+                addedBy: '"$JQ_BY"',
+                doneAt: null,
+                doneBy: null
+              })) as $newItems
+            | .checklist = ((.checklist // []) + $newItems)
+            | .checklistSeq = ($start + ($texts|length))
+            | .updatedAt=$now | .lastActivityAt=$now
+          )'
+      emit_event "$id" "checklist:add" "$*"
+      echo "checklist: $id +$# item(s)" ;;
+    done|undo)
+      local ids_json; ids_json="$(printf '%s\n' "$@" | jq -R . | jq -s .)"
+      _checklist_require_items "$id" "$ids_json"
+      local doneval; [[ "$op" == "done" ]] && doneval=true || doneval=false
+      apply_jq --arg id "$id" --argjson ids "$ids_json" --argjson doneval "$doneval" --arg now "$now" --arg actor "$ACTOR" '
+        .updatedAt=$now
+        | (.tasks[]|select(.id==$id)) |= (
+            .checklist = ((.checklist//[]) | map(
+              if (([.id] - $ids)|length)==0 then
+                .done = $doneval
+                | .doneAt = (if $doneval then $now else null end)
+                | .doneBy = (if $doneval then '"$JQ_BY"' else null end)
+              else . end))
+            | .updatedAt=$now | .lastActivityAt=$now
+          )'
+      emit_event "$id" "checklist:$op" "$*"
+      echo "checklist $op: $id ($#)" ;;
+    rm)
+      local ids_json; ids_json="$(printf '%s\n' "$@" | jq -R . | jq -s .)"
+      _checklist_require_items "$id" "$ids_json"
+      apply_jq --arg id "$id" --argjson ids "$ids_json" --arg now "$now" '
+        .updatedAt=$now
+        | (.tasks[]|select(.id==$id)) |= (
+            .checklist = ((.checklist//[]) | map(select((([.id] - $ids)|length) > 0)))
+            | .updatedAt=$now | .lastActivityAt=$now
+          )'
+      emit_event "$id" "checklist:rm" "$*"
+      echo "checklist removed: $id (-$#)" ;;
+    *) die "unknown checklist operation: $op (add|done|undo|rm)" ;;
+  esac
+}
+
+# Fails with a helpful message (not a silent no-op) if any of the given item-ids don't exist
+# on the task — shared by the done/undo/rm sub-ops of cmd_checklist().
+_checklist_require_items() {
+  local id="$1" ids_json="$2"
+  local missing
+  missing="$(jq -r --arg id "$id" --argjson ids "$ids_json" '
+    (.tasks[]|select(.id==$id)|(.checklist//[])|map(.id)) as $have
+    | $ids[] | select(([.] - $have)|length>0)
+  ' "$TASKS_FILE" | tr '\n' ' ')"
+  [[ -z "${missing// /}" ]] || die "no such checklist item(s) on $id: $missing"
+}
+
 cmd_assign() {
   require_tasks_file
   [[ $# -ge 2 ]] || die "usage: assign <id> <agent>"
@@ -630,8 +848,9 @@ cmd_deps() {
   ' "$TASKS_FILE"
 }
 
-cmd_next() {
-  require_tasks_file
+# Ordered ids of ready todos (dependency-satisfied), highest priority first. Shared by
+# `next` (display) and `next --claim` (atomic pick-and-claim).
+_ready_todo_ids() {
   jq -r '
     . as $root
     | def doneish($i): ($root.tasks[]|select(.id==$i)) as $d
@@ -642,9 +861,206 @@ cmd_next() {
         | select(.status=="todo")
         | select( ((.dependsOn//[]) | map(doneish(.)) | all) ) ]
       | sort_by(prio_rank, .createdAt)
-      | if length==0 then "no available todo (all blocked, done, or none exist)"
-        else (.[] | "\(.id)\t[\(.priority//"normal")]\t\(.title)") end
+      | .[].id
+  ' "$TASKS_FILE"
+}
+
+cmd_next() {
+  require_tasks_file
+  local do_claim=0
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --claim) do_claim=1; shift ;;
+      --*)     die "unknown flag: $1" ;;
+      *)       shift ;;
+    esac
+  done
+  if [[ $do_claim == 1 ]]; then
+    [[ -n "$ACTOR" ]] || die "next --claim needs --as <agent>"
+    # Walk candidates in priority order; the first one we can atomically claim is ours.
+    # If another agent claimed it in the race window, claim() leaves it untouched and we
+    # fall through to the next candidate.
+    local id
+    while IFS= read -r id; do
+      [[ -z "$id" ]] && continue
+      if _try_claim "$id" "$ACTOR"; then
+        echo "claimed: $id -> $ACTOR [in_progress]"
+        jq -r --arg id "$id" '.tasks[]|select(.id==$id)|"  \(.title)"' "$TASKS_FILE"
+        return 0
+      fi
+    done < <(_ready_todo_ids)
+    echo "no claimable todo (all taken, blocked, done, or none exist)"
+    return 0
+  fi
+  local list
+  list="$(_ready_todo_ids)"
+  if [[ -z "$list" ]]; then
+    echo "no available todo (all blocked, done, or none exist)"
+    return 0
+  fi
+  jq -r '
+    . as $root
+    | def doneish($i): ($root.tasks[]|select(.id==$i)) as $d
+        | ($d==null) or ($d.status=="done") or ($d.isArchived==true);
+      def prio_rank: {"urgent":0,"high":1,"normal":2,"low":3}[(.priority//"normal")] // 2;
+      [ $root.tasks[]
+        | select((.isArchived//false)|not)
+        | select(.status=="todo")
+        | select( ((.dependsOn//[]) | map(doneish(.)) | all) ) ]
+      | sort_by(prio_rank, .createdAt)
+      | .[] | "\(.id)\t[\(.priority//"normal")]\t\(.title)"
   ' "$TASKS_FILE" | column -t -s $'\t'
+}
+
+# --- Coordination: atomic claim / directed handoff / review routing --------------
+# The atomicity guarantee lives INSIDE the jq filter (`if .status=="todo"`), executed under the
+# mkdir-lock in apply_jq: two agents racing to claim the same todo are serialized, and only the
+# first flips it to in_progress. The loser's guard sees a non-todo status and writes nothing.
+# Returns 0 if the caller now owns the task in_progress, 1 otherwise (no output — callers report).
+_try_claim() {
+  local id="$1" agent="$2" now; now="$(now_iso)"
+  # by/files: see JQ_BY / JQ_TRANSITION_FILES near the top of the file. 'by' is the caller
+  # ($ACTOR), NOT necessarily $a (the claim's target can be a different agent than the one
+  # who issued the command).
+  apply_jq --arg id "$id" --arg a "$agent" --arg now "$now" --arg actor "$ACTOR" '
+    .updatedAt=$now
+    | (.tasks[]|select(.id==$id)) |= (
+        if .status=="todo" then
+          .history += [{at:$now, type:"status_changed", note:("claimed by "+$a), fromStatus:.status, toStatus:"in_progress", by:'"$JQ_BY"', files:'"$JQ_TRANSITION_FILES"'}]
+          | .status="in_progress" | .assignedAgentId=$a | .updatedAt=$now | .lastActivityAt=$now
+        else . end)'
+  local owner st
+  owner="$(jq -r --arg id "$id" '.tasks[]|select(.id==$id)|.assignedAgentId' "$TASKS_FILE")"
+  st="$(jq -r --arg id "$id" '.tasks[]|select(.id==$id)|.status' "$TASKS_FILE")"
+  if [[ "$owner" == "$agent" && "$st" == "in_progress" ]]; then
+    emit_event "$id" "claim" "$agent"
+    return 0
+  fi
+  return 1
+}
+
+cmd_claim() {
+  require_tasks_file
+  [[ $# -ge 1 ]] || die "usage: claim <id> [agent]   (agent defaults to the --as caller)"
+  local id="$1" agent="${2:-$ACTOR}"
+  [[ -n "$agent" ]] || die "no agent: pass --as <agent> or claim <id> <agent>"
+  task_exists "$id" || die "no such task: $id"
+  if _try_claim "$id" "$agent"; then
+    echo "claimed: $id -> $agent [in_progress]"
+  else
+    local owner st
+    owner="$(jq -r --arg id "$id" '.tasks[]|select(.id==$id)|.assignedAgentId' "$TASKS_FILE")"
+    st="$(jq -r --arg id "$id" '.tasks[]|select(.id==$id)|.status' "$TASKS_FILE")"
+    die "cannot claim $id: it is [$st], owned by ${owner:-?} (only 'todo' tasks are claimable)"
+  fi
+}
+
+cmd_handoff() {
+  require_tasks_file
+  [[ $# -ge 2 ]] || die "usage: handoff <id> <to-agent> [note]"
+  local id="$1" to="$2" note="${3:-}"
+  task_exists "$id" || die "no such task: $id"
+  local from; from="$(jq -r --arg id "$id" '.tasks[]|select(.id==$id)|.assignedAgentId // ""' "$TASKS_FILE")"
+  local now; now="$(now_iso)"
+  # HANDOFF: prefix (in English, like the rest of the engine's outgoing text) — this triggers
+  # noteKind()'s k-handoff badge on the board (see js/Utils.js's NOTE_KIND_STEMS); the script
+  # derives it, no manual tagging needed from the agent.
+  local trail="HANDOFF: 🤝 ${from:-?} → $to"; [[ -n "$note" ]] && trail="$trail — $note"
+  # by/files: same logic as cmd_note (JQ_BY / JQ_NOTE_FILES, see near the top of the file).
+  apply_jq --arg id "$id" --arg to "$to" --arg now "$now" --arg trail "$trail" --arg actor "$ACTOR" '
+    .updatedAt=$now
+    | (.tasks[]|select(.id==$id)) |= (
+        '"$JQ_NOTE_FILES"' as $delta
+        | .assignedAgentId=$to
+        | .notes += [{at:$now, text:$trail, by:'"$JQ_BY"', files:$delta}]
+        | .updatedAt=$now | .lastActivityAt=$now)'
+  local msg="→$to"; [[ -n "$note" ]] && msg="$msg: $note"
+  emit_event "$id" "handoff" "$msg" "$to"
+  echo "handoff: $id  ${from:-?} → $to"
+}
+
+cmd_review() {
+  require_tasks_file
+  [[ $# -ge 1 ]] || die "usage: review <id> [reviewer=main] [note]"
+  local id="$1" reviewer="${2:-main}" note="${3:-}"
+  task_exists "$id" || die "no such task: $id"
+  local worker; worker="$(jq -r --arg id "$id" '.tasks[]|select(.id==$id)|.assignedAgentId // ""' "$TASKS_FILE")"
+  local now; now="$(now_iso)"
+  local notval="null"; [[ -n "$note" ]] && notval="\$note"
+  # by/files: see JQ_BY / JQ_TRANSITION_FILES near the top of the file.
+  apply_jq --arg id "$id" --arg reviewer "$reviewer" --arg now "$now" --arg note "$note" --arg actor "$ACTOR" "
+    .updatedAt=\$now
+    | (.tasks[]|select(.id==\$id)) |= (
+        .history += [{at:\$now, type:\"status_changed\", note:$notval, fromStatus:.status, toStatus:\"review\", by:$JQ_BY, files:$JQ_TRANSITION_FILES}]
+        | .status=\"review\" | .assignedAgentId=\$reviewer | .updatedAt=\$now | .lastActivityAt=\$now)"
+  emit_event "$id" "status:review" "$note"
+  local msg="from ${worker:-?}"; [[ -n "$note" ]] && msg="$msg: $note"
+  emit_event "$id" "review-request" "$msg" "$reviewer"
+  echo "review: $id -> [review], reviewer=$reviewer (from ${worker:-?})"
+}
+
+# Tasks sitting in review, oldest first, with age since they entered review. Optionally only
+# those assigned to <reviewer> (the review queue for one agent).
+cmd_review_queue() {
+  require_tasks_file
+  local reviewer="${1:-}"
+  jq -r --arg who "$reviewer" '
+    def secs($t): ($t|sub("\\.[0-9]+Z$";"Z")|fromdateiso8601);
+    def entered_review:
+      ([.history[]? | select(.toStatus=="review") | .at] | last) // .lastActivityAt // .updatedAt;
+    (now) as $n
+    | [ .tasks[]
+        | select((.isArchived//false)|not)
+        | select(.status=="review")
+        | select($who=="" or (.assignedAgentId==$who)) ]
+    | sort_by(entered_review)
+    | if length==0 then "review queue empty" + (if $who=="" then "" else " for \($who)" end)
+      else (.[] | "\(.id)\t\(((($n - secs(entered_review))/3600)*10|floor)/10)h\t@\(.assignedAgentId // "?")\t\(.title)") end
+  ' "$TASKS_FILE" | column -t -s $'\t'
+}
+
+# Tasks held but idle: in a "working" status (default in_progress + review) with no activity
+# for longer than the threshold. Surfaces the review/in_progress graveyard so main can re-route.
+cmd_stale() {
+  require_tasks_file
+  local threshold_s=86400   # default 24h
+  local -a statuses=()
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --older-than) threshold_s="$(_parse_duration "${2:-24h}")"; shift 2 ;;
+      --older-than=*) threshold_s="$(_parse_duration "${1#*=}")"; shift ;;
+      --*) die "unknown flag: $1" ;;
+      *) statuses+=("$1"); shift ;;
+    esac
+  done
+  [[ ${#statuses[@]} -eq 0 ]] && statuses=(in_progress review)
+  local st_json; st_json="$(printf '%s\n' "${statuses[@]}" | jq -R . | jq -s .)"
+  local now_s; now_s="$(date +%s)"
+  local cutoff=$(( now_s - threshold_s ))
+  jq -r --argjson cutoff "$cutoff" --argjson statuses "$st_json" --argjson now "$now_s" '
+    def secs($t): ($t|sub("\\.[0-9]+Z$";"Z")|fromdateiso8601);
+    [ .tasks[]
+      | select((.isArchived//false)|not)
+      | select(.status as $s | $statuses | index($s))
+      | select(secs(.lastActivityAt // .updatedAt) < $cutoff) ]
+    | sort_by(.lastActivityAt // .updatedAt)
+    | if length==0 then "no stale tasks"
+      else (.[] | "\(.id)\t[\(.status)]\t\(((($now - secs(.lastActivityAt // .updatedAt))/3600)*10|floor)/10)h idle\t@\(.assignedAgentId // "?")\t\(.title)") end
+  ' "$TASKS_FILE" | column -t -s $'\t'
+}
+
+# Parse a duration like "24h", "2d", "90m", or a bare number (seconds) into seconds.
+_parse_duration() {
+  local d="$1" n unit
+  n="${d%[hdmsHDMS]}"; unit="${d#$n}"
+  [[ "$n" =~ ^[0-9]+$ ]] || die "invalid duration: $d (use e.g. 24h, 2d, 90m)"
+  case "$unit" in
+    h|H) echo $(( n * 3600 )) ;;
+    d|D) echo $(( n * 86400 )) ;;
+    m|M) echo $(( n * 60 )) ;;
+    s|S|"") echo "$n" ;;
+    *) die "invalid duration unit: $unit (use h|d|m|s)" ;;
+  esac
 }
 
 cmd_reopen() {
@@ -654,10 +1070,11 @@ cmd_reopen() {
   task_exists "$id" || die "no such task: $id"
   is_valid_status "$new" || die "invalid status: $new (valid: $VALID_STATUSES)"
   local now; now="$(now_iso)"
-  apply_jq --arg id "$id" --arg new "$new" --arg now "$now" '
+  # by/files: see JQ_BY / JQ_TRANSITION_FILES near the top of the file — reopen is also a real transition.
+  apply_jq --arg id "$id" --arg new "$new" --arg now "$now" --arg actor "$ACTOR" '
     .updatedAt=$now
     | (.tasks[]|select(.id==$id)) |= (
-        .history += [{at:$now, type:"reopened", note:"Task reopened.", fromStatus:.status, toStatus:$new}]
+        .history += [{at:$now, type:"reopened", note:"Task reopened.", fromStatus:.status, toStatus:$new, by:'"$JQ_BY"', files:'"$JQ_TRANSITION_FILES"'}]
         | .status=$new | .isArchived=false | .updatedAt=$now | .lastActivityAt=$now)'
   emit_event "$id" "status:$new" "reopened"
   echo "reopened: $id -> $new"
@@ -672,10 +1089,13 @@ cmd_status_many() {
   for id in "$@"; do task_exists "$id" || die "no such task: $id"; done
   local ids_json; ids_json="$(printf '%s\n' "$@" | jq -R . | jq -s .)"
   local now; now="$(now_iso)"
-  apply_jq --arg new "$new" --arg now "$now" --argjson ids "$ids_json" '
+  # by/files: see JQ_BY / JQ_TRANSITION_FILES near the top of the file. Under |=, '.' applies
+  # independently to each selected task, so the fragments look at each task's own notes/history
+  # per task — they don't get mixed up across the tasks of the bulk operation.
+  apply_jq --arg new "$new" --arg now "$now" --argjson ids "$ids_json" --arg actor "$ACTOR" '
     .updatedAt=$now
     | (.tasks[] | select((.id as $i | $ids | index($i)) != null)) |= (
-        .history += [{at:$now, type:"status_changed", note:null, fromStatus:.status, toStatus:$new}]
+        .history += [{at:$now, type:"status_changed", note:null, fromStatus:.status, toStatus:$new, by:'"$JQ_BY"', files:'"$JQ_TRANSITION_FILES"'}]
         | .status=$new | .updatedAt=$now | .lastActivityAt=$now)'
   for id in "$@"; do emit_event "$id" "status:$new" ""; done
   echo "status (bulk): $* -> $new"
@@ -697,7 +1117,22 @@ cmd_validate() {
             ( if ($t.title//"")=="" then "\($t.id): missing title" else empty end ),
             ( if ($vs|index($t.status)) then empty else "\($t.id): invalid status: \($t.status)" end ),
             ( if (($t.priority//"normal") as $p | $vp|index($p)) then empty else "\($t.id): invalid priority: \($t.priority)" end ),
-            ( ($t.dependsOn//[])[] as $d | select(($ids|index($d))==null) | "\($t.id): broken dependency -> \($d)" )
+            ( ($t.dependsOn//[])[] as $d | select(($ids|index($d))==null) | "\($t.id): broken dependency -> \($d)" ),
+            ( ($t.checklist//[]) as $cl
+              | if ($cl|type) != "array" then "\($t.id): checklist is not an array" else empty end ),
+            ( ($t.checklist//[]) as $cl | select(($cl|type)=="array") | $cl[] as $c
+              | if ($c.id//"")=="" then "\($t.id): a checklist item has an empty/missing id"
+                elif ($c|has("text")|not) or (($c.text|type)!="string") then "\($t.id): checklist item \($c.id//"?"): missing/invalid text"
+                elif ($c|has("done")|not) or (($c.done|type)!="boolean") then "\($t.id): checklist item \($c.id//"?"): missing/invalid done flag"
+                else empty end ),
+            ( ($t.checklist//[]) as $cl | select(($cl|type)=="array")
+              | ($cl|map(.id)|group_by(.)|map(select(length>1)|.[0])) as $dups
+              | $dups[] | "\($t.id): duplicate checklist item id: \(.)" ),
+            ( ($t.checklist//[]) as $cl | select(($cl|type)=="array")
+              | ( [$cl[] | (.id // "") | select(test("^c[0-9]+$")) | (sub("^c";"")|tonumber)] ) as $nums
+              | (if ($nums|length)>0 then ($nums|max) else 0 end) as $maxItemNum
+              | ($t.checklistSeq // 0) as $seq
+              | if $seq < $maxItemNum then "\($t.id): checklistSeq (\($seq)) is behind the highest checklist item id (c\($maxItemNum)) — likely hand-edited; new items could collide with an existing id" else empty end )
         ] )
     + ( [.tasks[].id] | group_by(.) | map(select(length>1)|.[0]) | map("duplicate id: \(.)") )
     | .[]
@@ -747,7 +1182,8 @@ cmd_inbox() {
   printf '%s\n' "$maxseq" > "$cursor_file" 2>/dev/null || true
   jq -r --argjson seen "$seen" --arg me "$agent" '
       select(.seq > $seen and .by != $me)
-      | "📬 [\(.task)] \(.by) → \(.kind)" + (if ((.text//"")|length)==0 then "" else ": \(.text)" end)
+      | (if (.to // "")==$me then "‼️ " else "📬 " end)
+        + "[\(.task)] \(.by) → \(.kind)" + (if ((.text//"")|length)==0 then "" else ": \(.text)" end)
     ' "$EVENTS_FILE" 2>/dev/null || true
 }
 
@@ -858,10 +1294,73 @@ print_lang_hint() {
   esac
 }
 
+# --- Update notice (silent, cached, non-blocking) --------------------------------
+# The coding agents never find out on their own when a newer claude-task-manager version is
+# published, so surface it via the one channel they DO read on every command: task.sh's stderr.
+# But task.sh is the hot path — a network round-trip on every mutation would add real latency
+# (see engine/check-update.sh's header). So the networked check is split off:
+#   (1) occasionally, gated by BOTH a random draw and a TTL, we spawn a fully DETACHED
+#       background subshell that sources check-update.sh and writes its result to a small flag
+#       file — this never blocks the current command; and
+#   (2) every (non-meta) call cheaply reads that flag file (no network) and, if an update is
+#       known available, prints a throttled one-line notice to stderr.
+# Opt out entirely with TM_NO_UPDATE_CHECK=1.
+UPDATE_FLAG="$TM_DIR/.update-available"       # non-empty (holds branch name) when origin is ahead
+UPDATE_CHECKED="$TM_DIR/.update-checked-at"   # mtime = when the networked check last ran
+UPDATE_NOTIFIED="$TM_DIR/.update-notified-at" # mtime = when we last printed the notice
+
+# Seconds since <file> was last modified; a large number if it doesn't exist. Portable
+# (BSD/macOS `stat -f %m`, GNU/Linux `stat -c %Y`).
+_age_secs() {
+  local f="$1" m now
+  [[ -e "$f" ]] || { echo 999999999; return; }
+  m="$(stat -f %m "$f" 2>/dev/null || stat -c %Y "$f" 2>/dev/null || echo 0)"
+  now="$(date +%s)"
+  echo $(( now - m ))
+}
+
+maybe_notify_update() {
+  # Skip hot/meta commands — especially inbox, which the PostToolUse hook runs constantly.
+  case "$1" in help|-h|--help|inbox|init|validate|check|raw) return 0 ;; esac
+  [[ "${TM_NO_UPDATE_CHECK:-0}" == "1" ]] && return 0
+
+  # The package repo root is one level up from engine/ (where this script lives). The update
+  # mechanism is git-pull based, so it only means anything for a git checkout.
+  local repo_root; repo_root="$(dirname "$SCRIPT_DIR")"
+  [[ -d "$repo_root/.git" ]] || return 0
+
+  # (1) Refresh the cache occasionally, entirely in the background (never blocks this call).
+  #     The random gate spreads checks across calls; the TTL bounds how often the network is
+  #     actually hit even under heavy traffic from several agents. We stamp UPDATE_CHECKED
+  #     BEFORE spawning so concurrent invocations within the window don't all pile on.
+  local ttl="${TM_UPDATE_TTL:-21600}"   # 6h between networked checks
+  local prob="${TM_UPDATE_PROB:-8}"     # ~1-in-8 calls even considers a refresh
+  if (( RANDOM % prob == 0 )) && [[ "$(_age_secs "$UPDATE_CHECKED")" -ge "$ttl" ]]; then
+    touch "$UPDATE_CHECKED" 2>/dev/null || true
+    ( source "$SCRIPT_DIR/check-update.sh" 2>/dev/null \
+        && refresh_update_cache "$repo_root" "$UPDATE_FLAG" ) >/dev/null 2>&1 &
+    disown 2>/dev/null || true
+  fi
+
+  # (2) If an update is known available, print a THROTTLED notice to stderr, so it doesn't
+  #     repeat on every command in a session (agents run task.sh many times).
+  if [[ -s "$UPDATE_FLAG" ]]; then
+    local ntl="${TM_UPDATE_NOTICE_TTL:-3600}"   # at most once per hour, per project store
+    if [[ "$(_age_secs "$UPDATE_NOTIFIED")" -ge "$ntl" ]]; then
+      touch "$UPDATE_NOTIFIED" 2>/dev/null || true
+      local branch; branch="$(tr -d '[:space:]' < "$UPDATE_FLAG" 2>/dev/null || echo main)"
+      printf '\033[33m[task-manager] A newer claude-task-manager version is available on origin/%s. Tell the human to update the package: git -C %s pull\033[0m\n' \
+        "${branch:-main}" "$repo_root" >&2
+    fi
+  fi
+  return 0
+}
+
 main() {
   local cmd="${1:-help}"
   shift || true
   print_lang_hint "$cmd"
+  maybe_notify_update "$cmd"
 
   # Extract --as <agent> from ANYWHERE in the arguments; the rest goes into array A.
   local -a A=()
@@ -896,6 +1395,11 @@ main() {
     history)   cmd_history "$@" ;;
     raw)       cmd_raw "$@" ;;
     next)      cmd_next "$@" ;;
+    claim)     cmd_claim "$@" ;;
+    handoff)   cmd_handoff "$@" ;;
+    review)    cmd_review "$@" ;;
+    review-queue|reviewq) cmd_review_queue "$@" ;;
+    stale)     cmd_stale "$@" ;;
     deps)      cmd_deps "$@" ;;
     validate|check) cmd_validate "$@" ;;
     add)       cmd_add "$@" ;;
@@ -907,6 +1411,8 @@ main() {
     priority|prio) cmd_priority "$@" ;;
     module|mod) cmd_module "$@" ;;
     tag)       cmd_tag "$@" ;;
+    files)     cmd_files "$@" ;;
+    checklist) cmd_checklist "$@" ;;
     assign)    cmd_assign "$@" ;;
     dep)       cmd_dep "$@" ;;
     archive)   cmd_archive "$@" ;;

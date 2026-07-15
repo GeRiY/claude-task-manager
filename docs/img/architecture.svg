@@ -1,0 +1,66 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 780 480" width="780" height="480" role="img" aria-labelledby="ctm-arch-title ctm-arch-desc">
+  <title id="ctm-arch-title">claude-task-manager architecture: the single-writer invariant</title>
+  <desc id="ctm-arch-desc">Agents (main agent plus teammates backend-dev, frontend-dev, investigator, playwright-tester) on the left, and a human using the browser board on the right, both converge on task.sh, the single atomic writer under a lock, which alone writes data/&lt;id&gt;/tasks.json. The board's writes are routed through api/index.php before reaching task.sh; the browser never writes the JSON file directly.</desc>
+
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#64748b"/>
+    </marker>
+  </defs>
+
+  <style>
+    .box { fill: none; stroke: #64748b; stroke-width: 1.6; rx: 8; }
+    .box-accent { fill: none; stroke: #3b82f6; stroke-width: 2; rx: 8; }
+    .lbl { font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #64748b; }
+    .title { font-size: 15px; font-weight: 600; }
+    .sub { font-size: 11.5px; }
+    .mono { font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace; font-size: 12px; }
+    .edge { stroke: #64748b; stroke-width: 1.6; fill: none; marker-end: url(#arrow); }
+    .edge-accent { stroke: #3b82f6; stroke-width: 2; fill: none; marker-end: url(#arrow); }
+    .note { font-size: 11px; fill: #94a3b8; font-style: italic; }
+  </style>
+
+  <!-- Left column: agents -->
+  <rect class="box" x="30" y="30" width="230" height="52"/>
+  <text class="lbl title" x="145" y="53" text-anchor="middle">Main agent</text>
+  <text class="lbl sub" x="145" y="70" text-anchor="middle">plans, assigns, reviews</text>
+
+  <rect class="box" x="30" y="110" width="230" height="92"/>
+  <text class="lbl title" x="145" y="133" text-anchor="middle">Teammate agents</text>
+  <text class="lbl mono" x="145" y="152" text-anchor="middle">backend-dev · frontend-dev</text>
+  <text class="lbl mono" x="145" y="169" text-anchor="middle">investigator</text>
+  <text class="lbl mono" x="145" y="186" text-anchor="middle">playwright-tester</text>
+
+  <path class="edge" d="M145,82 L145,110"/>
+
+  <!-- Right column: human + board -->
+  <rect class="box" x="520" y="30" width="230" height="52"/>
+  <text class="lbl title" x="635" y="53" text-anchor="middle">Human</text>
+  <text class="lbl sub" x="635" y="70" text-anchor="middle">clicks the board</text>
+
+  <rect class="box" x="520" y="110" width="230" height="52"/>
+  <text class="lbl title" x="635" y="133" text-anchor="middle">Browser board</text>
+  <text class="lbl sub" x="635" y="150" text-anchor="middle">index.html · js/*</text>
+
+  <path class="edge" d="M635,82 L635,110"/>
+
+  <rect class="box" x="520" y="192" width="230" height="52"/>
+  <text class="lbl title" x="635" y="215" text-anchor="middle">api/index.php</text>
+  <text class="lbl sub" x="635" y="232" text-anchor="middle">command allowlist only</text>
+
+  <path class="edge" d="M635,162 L635,192"/>
+  <text class="lbl note" x="750" y="180" text-anchor="end">never writes JSON directly</text>
+
+  <!-- Convergence point -->
+  <path class="edge" d="M145,202 C145,300 300,330 375,342"/>
+  <path class="edge" d="M635,244 C635,310 470,330 405,342"/>
+
+  <rect class="box-accent" x="215" y="344" width="350" height="66"/>
+  <text class="lbl title" x="390" y="370" text-anchor="middle">task.sh — the single writer</text>
+  <text class="lbl sub" x="390" y="388" text-anchor="middle">atomic mkdir-lock · history · events.jsonl</text>
+
+  <path class="edge-accent" d="M390,410 L390,438"/>
+
+  <rect class="box" x="255" y="440" width="270" height="34"/>
+  <text class="lbl mono" x="390" y="462" text-anchor="middle">data/&lt;id&gt;/tasks.json</text>
+</svg>

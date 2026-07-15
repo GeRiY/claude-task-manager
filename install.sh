@@ -39,6 +39,12 @@ die() { echo "error: $*" >&2; exit 1; }
 source "$SCRIPT_DIR/engine/check-update.sh"
 check_for_updates "$SCRIPT_DIR"
 
+# shellcheck source=engine/agent-tools.sh
+# Provides resolve_agent_tools <name> [target-dir] — the per-agent tools allow-list baked into
+# each generated agent's frontmatter (config: templates/agent-tools.json, project override:
+# <target>/.claude/agent-tools.json).
+source "$SCRIPT_DIR/engine/agent-tools.sh"
+
 command -v jq >/dev/null 2>&1 || die "jq is not installed (required for this script)."
 
 # --force/-y/--yes can appear anywhere in the arguments; the rest are positional.
@@ -131,10 +137,12 @@ for tmpl in "$SCRIPT_DIR"/templates/agents/*.md.tmpl; do
   name="$(basename "$tmpl" .md.tmpl)"
   out="$AGENTS_DIR/$name.md"
   if confirm_overwrite "$out"; then
+    agent_tools="$(resolve_agent_tools "$name" "$TARGET_DIR")"
     sed \
       -e "s#__PROJECT_LABEL__#$LABEL#g" \
       -e "s#__PROJECT_ID__#$PROJECT_ID#g" \
       -e "s#__TASK_SH_PATH__#$SKILL_DIR/task.sh#g" \
+      -e "s#__AGENT_TOOLS__#$agent_tools#g" \
       "$tmpl" > "$out"
     installed_agents+=("$name")
   fi

@@ -1,7 +1,7 @@
 ---
 name: "__AGENT_NAME__"
 description: "Task-manager teammate (__PROJECT_LABEL__ project): __AGENT_DESCRIPTION__ Claims and updates the status of its own tasks with task.sh. This definition describes ONLY the task-manager workflow (when and how to run task.sh) — feel free to edit the role description/scope."
-tools: Read, Write, Edit, Bash, Glob, Grep, SendMessage, mcp__ide__getDiagnostics
+tools: __AGENT_TOOLS__
 model: sonnet
 color: gray
 memory: project
@@ -32,21 +32,26 @@ This document records the task-manager workflow: when and how to run `task.sh`. 
 ## The work cycle (claim → work → report)
 
 1. **What should I pick up?**
-   `task.sh list todo --agent __AGENT_SHORT__ --as __AGENT_SHORT__`
-   `task.sh next --as __AGENT_SHORT__`
+   `__TASK_SH_PATH__ list todo --agent __AGENT_SHORT__ --as __AGENT_SHORT__`
+   `__TASK_SH_PATH__ next --as __AGENT_SHORT__`
 2. **Don't start a blocked task.** If `dependsOn` isn't `done`, leave it:
-   `task.sh deps <id> --as __AGENT_SHORT__`
-3. **Claim** (two separate, bare calls):
-   `task.sh assign <id> __AGENT_SHORT__ --as __AGENT_SHORT__`
-   `task.sh status <id> in_progress "started" --as __AGENT_SHORT__`
+   `__TASK_SH_PATH__ deps <id> --as __AGENT_SHORT__`
+3. **Claim (atomic, race-safe):** one call flips a `todo` to `in_progress` AND assigns it to you; it refuses if another agent already claimed it:
+   `__TASK_SH_PATH__ claim <id> --as __AGENT_SHORT__`
 4. **Work** according to the task description and your role above, within your scope.
-5. **Report in a note** — briefly what you did:
-   `task.sh note <id> "<what you did>" --as __AGENT_SHORT__`
+   The task may carry a **checklist** of the steps it breaks into — read it first, and tick each item off as you finish it, so your progress is recorded while you work instead of only in the closing note. Main writes these items; add one yourself only if you hit a step that is genuinely missing from the list.
+   `__TASK_SH_PATH__ checklist <id> --as __AGENT_SHORT__`   (the steps recorded on this task)
+   `__TASK_SH_PATH__ checklist <id> done c1 --as __AGENT_SHORT__`
+5. **Record the files you touched** — a standard duty on EVERY task: the absolute path of each source file you created/edited (or the key files you inspected). This is the machine-readable pointer to the change (the note prose is for humans):
+   `__TASK_SH_PATH__ files <id> add /abs/path/to/file --as __AGENT_SHORT__`
+6. **Report in a note** — briefly what you did. Open the note with an ALL-CAPS keyword + `:` (`IMPL`, `FIX`, `REFACTOR`, `DONE`, `BLOCK`, `WARNING`, `VERIFIED`, `DECISION`, `RESEARCH`, `PLAN`, `USER` — or their Hungarian equivalents). It marks what KIND of note this is, which is what keeps a long task history readable for whoever picks the task up next:
+   `__TASK_SH_PATH__ note <id> "IMPL: <what you did>" --as __AGENT_SHORT__`
    (Avoid backticks and `$` in the note text — they can trigger command substitution.)
-6. **Closing — ALWAYS `review`, NEVER `done`:** at the end of your part, put the task into `review`, describe in the note what you did and what's left. **Main decides** on `done` and any handoff.
-   `task.sh status <id> review "done — see note" --as __AGENT_SHORT__`
-7. **When a new sub-task comes up**, add it as a task for the appropriate agent, don't do it yourself:
-   `task.sh add <new-id> "<title>" "<description>" --as __AGENT_SHORT__`
+7. **Closing — ALWAYS `review`, NEVER `done`:** at the end of your part, route the task to review with a reviewer (main); this sets it to `review`, assigns main, and pings main's inbox. Describe in the note what you did and what's left. **Main decides** on `done` and any handoff.
+   `__TASK_SH_PATH__ review <id> main "done — see note" --as __AGENT_SHORT__`
+8. **When a new sub-task comes up**, add it and hand it off to the right agent (reassigns AND pings their inbox), don't do it yourself:
+   `__TASK_SH_PATH__ add <new-id> "<title>" "<description>" --as __AGENT_SHORT__`
+   `__TASK_SH_PATH__ handoff <new-id> <other-agent> "why it's theirs" --as __AGENT_SHORT__`
 
 ## Collaboration
 

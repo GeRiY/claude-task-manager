@@ -61,7 +61,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST') {
 // task.sh commands exposed from the board. rm/restore/raw/archive are DELIBERATELY excluded.
 const ALLOWED = [
     'status', 'note', 'priority', 'module', 'tag', 'assign', 'dep',
-    'status-many', 'reopen', 'add',
+    'status-many', 'reopen', 'add', 'checklist',
 ];
 
 const ALLOWED_LANGS = ['en', 'hu'];

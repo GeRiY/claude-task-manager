@@ -117,7 +117,15 @@ case "$cmd" in
     sub="${1:-}"; shift || true
     case "$sub" in
       add) "$ROOT_DIR/bin/add-agent.sh" "$(pwd)" "$@" ;;
-      *) die "usage: ctm agent add <name> [description]" ;;
+      tools)
+        # Show the effective per-agent tools allow-list that `ctm init` would bake in
+        # (repo config + this project's optional .claude/agent-tools.json override).
+        # shellcheck source=engine/agent-tools.sh
+        source "$ROOT_DIR/engine/agent-tools.sh"
+        proj="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+        print_agent_tools "$proj" "${1:-}" | column -t -s $'\t'
+        ;;
+      *) die "usage: ctm agent add <name> [description]  |  ctm agent tools [name]" ;;
     esac
     ;;
   up)
@@ -177,6 +185,9 @@ ctm — claude-task-manager CLI
   ctm wrapper <id>                Print a project's generated wrapper task.sh.
   ctm agent add <name> [desc]     Create a custom teammate definition in the CURRENT
                                    (already "ctm init"-ed) project — always named "tm-<name>".
+  ctm agent tools [name]          Show the effective per-agent tools allow-list baked in at
+                                   init (config: templates/agent-tools.json; project override:
+                                   .claude/agent-tools.json).
   ctm up [port]                   Check/start the board with docker. Starts it if not
                                    running; does nothing if already running; if you also give
                                    a port, sets it and restarts if needed.

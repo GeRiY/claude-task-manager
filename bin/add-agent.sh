@@ -3,10 +3,10 @@
 # add-agent.sh — create a custom teammate agent definition in an ALREADY installed
 # (ctm init-ed) project.
 #
-# Naming convention: claude-task-manager's base set, installed by install.sh, is always
-# "ctm-*" (ctm-frontend-developer / ctm-backend-developer / ctm-code-investigator) —
-# generated/refreshed by "ctm init". Custom agents created with THIS script, as needed by
-# the user, are always named "tm-*" — so at a glance you can tell what's the auto-refreshed
+# Naming convention: claude-task-manager's base set, installed by install.sh, is unprefixed
+# (frontend-dev / backend-dev / investigator / playwright-tester — the launch name IS the
+# task-manager identity) — generated/refreshed by "ctm init". Custom agents created with THIS
+# script, as needed by the user, are always named "tm-*" — so at a glance you can tell what's the auto-refreshed
 # base set apart from a custom, hand-edited addition ("ctm init" never touches these).
 #
 # Usage (typically invoked via the "ctm agent add" subcommand):
@@ -29,6 +29,9 @@ die() { echo "error: $*" >&2; exit 1; }
 source "$ROOT_DIR/engine/check-update.sh"
 check_for_updates "$ROOT_DIR"
 
+# shellcheck source=engine/agent-tools.sh
+source "$ROOT_DIR/engine/agent-tools.sh"
+
 TARGET_ARG="${1:-}"
 if [[ -n "$TARGET_ARG" && -d "$TARGET_ARG" ]]; then
   TARGET_DIR="$(cd "$TARGET_ARG" && pwd)"
@@ -48,9 +51,17 @@ SKILL_DIR="$TARGET_DIR/.claude/skills/task-manager"
 TASK_SH="$SKILL_DIR/task.sh"
 [[ -x "$TASK_SH" ]] || die "this project is not installed — run first: ctm init (here: $TARGET_DIR)"
 
-# Normalize the name: always with a "tm-" prefix; "ctm-" is reserved (the base set's prefix).
+# Normalize the name: always with a "tm-" prefix. The base set's names are reserved: a custom
+# agent's task-manager IDENTITY is the stripped SHORT (its `--as` value), so `add-agent
+# backend-dev` would install `tm-backend-dev` but claim tasks AS `backend-dev` — the same
+# identity as the base agent, and the two would fight over the same queue. The tm- prefix on
+# the launch name does NOT protect against that; only this check does.
+BASE_AGENTS="backend-dev frontend-dev investigator playwright-tester"
 SHORT="${RAW_NAME#tm-}"
-[[ "$SHORT" == ctm-* || "$SHORT" == ctm ]] && die 'the "ctm-" prefix is reserved (for the base agents) — choose a different name'
+[[ "$SHORT" == ctm-* || "$SHORT" == ctm ]] && die 'the "ctm-" prefix is reserved — choose a different name'
+for reserved in $BASE_AGENTS; do
+  [[ "$SHORT" == "$reserved" ]] && die "the name \"$SHORT\" is a base agent — a custom agent would claim tasks as the same identity; choose a different name"
+done
 [[ "$SHORT" =~ ^[A-Za-z0-9_-]+$ ]] || die "invalid name (only A-Za-z0-9_- allowed): $RAW_NAME"
 AGENT_NAME="tm-$SHORT"
 
@@ -65,12 +76,14 @@ mkdir -p "$AGENTS_DIR"
 OUT="$AGENTS_DIR/$AGENT_NAME.md"
 [[ -e "$OUT" ]] && die "already exists: $OUT (delete it by hand if you want to regenerate it)"
 
+AGENT_TOOLS="$(resolve_agent_tools "$AGENT_NAME" "$TARGET_DIR")"
 sed \
   -e "s#__AGENT_NAME__#$AGENT_NAME#g" \
   -e "s#__AGENT_SHORT__#$SHORT#g" \
   -e "s#__AGENT_DESCRIPTION__#$DESCRIPTION#g" \
   -e "s#__PROJECT_LABEL__#$LABEL#g" \
   -e "s#__TASK_SH_PATH__#$TASK_SH#g" \
+  -e "s#__AGENT_TOOLS__#$AGENT_TOOLS#g" \
   "$ROOT_DIR/templates/tm-custom.md.tmpl" > "$OUT"
 
 echo "created: $OUT"

@@ -18,7 +18,7 @@ export class UrlState {
       view: p.get("view") || localStorage.getItem("tm.view") || "board",
       compact: p.get("compact") === "1" || (!p.has("compact") && localStorage.getItem("tm.compact") === "1"),
       agentFilter: p.has("agent") ? new Set(p.get("agent").split(",").filter(Boolean)) : null,
-      moduleFilter: p.get("module") || null,
+      moduleFilter: p.has("module") ? new Set(p.get("module").split(",").filter(Boolean)) : null,
       quickFilter: p.get("quick") || null,
       pendingTask: p.get("task") || null,
       collapsedCols: new Set(JSON.parse(localStorage.getItem("tm.collapsed") || "[]")),
@@ -34,7 +34,7 @@ export class UrlState {
     if (lang && lang !== "en") p.set("lang", lang);
     if (q && q.trim()) p.set("q", q.trim());
     if (agentFilter) p.set("agent", [...agentFilter].join(","));
-    if (moduleFilter) p.set("module", moduleFilter);
+    if (moduleFilter && moduleFilter.size) p.set("module", [...moduleFilter].join(","));
     if (quickFilter) p.set("quick", quickFilter);
     if (sort !== "activity") p.set("sort", sort);
     if (view !== "board") p.set("view", view);

@@ -26,7 +26,8 @@ export class App {
       toggle: el("toggle"), refresh: el("refresh"), sort: el("sort"),
       viewBoard: el("viewBoard"), viewSwim: el("viewSwim"), viewFeed: el("viewFeed"), compact: el("compact"),
       qfReview: el("qfReview"), qfActive: el("qfActive"), qfBlocked: el("qfBlocked"), notifyBtn: el("notifyBtn"),
-      moduleFilter: el("moduleFilter"),
+      moduleMs: el("moduleMs"), moduleMsBtn: el("moduleMsBtn"), moduleMsLabel: el("moduleMsLabel"),
+      moduleMsPop: el("moduleMsPop"), moduleMsSearch: el("moduleMsSearch"), moduleMsAll: el("moduleMsAll"), moduleMsList: el("moduleMsList"),
       dot: el("dot"), statusText: el("statusText"), clock: el("clock"), banner: el("banner"),
       overlay: el("overlay"), mTitle: el("mTitle"), mBody: el("mBody"), mClose: el("mClose"),
       ctxBtn: el("ctxBtn"), ctxOverlay: el("ctxOverlay"), ctxClose: el("ctxClose"), ctxBody: el("ctxBody"), ctxUpdated: el("ctxUpdated"),
@@ -44,7 +45,9 @@ export class App {
     this.view = "board";
     this.compact = false;
     this.agentFilter = null;        // null = all; Set = agents to show
-    this.moduleFilter = null;       // null = all modules; string = one module
+    this.moduleFilter = null;       // null = all modules; Set = modules to show
+    this.moduleSearch = "";         // module-filter popover search text
+    this.moduleMsOpen = false;      // module-filter popover open state
     this.quickFilter = null;        // null | "review" | "active" | "blocked" (#5)
     this.collapsedCols = new Set();
     this.openTaskId = null;
@@ -77,7 +80,7 @@ export class App {
     this.pendingTask = s.pendingTask;
     this.collapsedCols = s.collapsedCols;
     if (s.interval) this.dom.interval.value = s.interval;
-    this.dom.actor.value = localStorage.getItem("tm.actor") || "human";   // üresen alapból human
+    this.dom.actor.value = localStorage.getItem("tm.actor") || "human";   // defaults to human when empty
     this.dom.sort.value = this.sort;
     this.setViewButtons();
     this.setQuickButtons();
@@ -97,10 +100,10 @@ export class App {
     this.dom.dot.classList.remove("pulse"); void this.dom.dot.offsetWidth; this.dom.dot.classList.add("pulse");
     this.dom.statusText.textContent = text;
   }
-  // A hibaüzenetet a saját kontextusában mutatjuk meg: ha épp egy modal nyitva van,
-  // a modalon belül (modal-banner), különben a főoldali bannerben. Így soha nem kerül a
-  // modal takarásába, és nem tűnik el a poll miatt — a felhasználó zárja be, vagy a
-  // következő sikeres művelet törli. msg HTML-t is tartalmazhat (i18n sablon esc-elt értékkel).
+  // The error message is shown in its own context: inside the modal (modal-banner) if
+  // one is open, otherwise in the main-page banner. This way it's never covered by the
+  // modal, and it doesn't disappear because of polling — the user dismisses it, or the
+  // next successful action clears it. msg may also contain HTML (i18n template with escaped values).
   showBanner(msg) {
     if (msg) {
       const modalBanner = document.querySelector(".overlay.show .modal-banner");
@@ -108,15 +111,15 @@ export class App {
       if (modalBanner) {
         modalBanner.innerHTML = html;
         modalBanner.classList.add("show");
-        this.dom.banner.classList.remove("show");   // ne maradjon takarásban a főoldali példány
+        this.dom.banner.classList.remove("show");   // don't leave the main-page instance hidden behind it
       } else {
         this.dom.banner.innerHTML = html;
         this.dom.banner.classList.add("show");
       }
       return;
     }
-    // Törlés: csak a főoldali bannert. A modal-banner életciklusát külön kezeljük
-    // (modal nyitás/zárás, elvetés, vagy sikeres írás után) — lásd clearModalBanner().
+    // Clearing: only the main-page banner. The modal-banner's lifecycle is handled
+    // separately (modal open/close, dismiss, or after a successful write) — see clearModalBanner().
     this.dom.banner.classList.remove("show");
   }
   clearModalBanner() {
@@ -205,7 +208,7 @@ export class App {
       changeInfo: this.taskStore.changeInfo,
     });
     this.syncActorList();
-    this.syncModuleFilterOptions();
+    this.renderModuleFilter();
     this.tickRelTimes();
   }
 
@@ -240,24 +243,81 @@ export class App {
     this.dom.actorList.innerHTML = all.map(a => `<option value="${Utils.esc(a)}"></option>`).join("");
   }
 
-  // Populates the <select id="moduleFilter"> with known modules, preserving the current selection.
-  syncModuleFilterOptions() {
-    if (!this.dom.moduleFilter) return;
-    const modules = this.modulesList();
-    const cur = this.moduleFilter || "";
-    this.dom.moduleFilter.innerHTML =
-      `<option value="">${Utils.esc(I18n.t("ctrl.module.all"))}</option>` +
-      modules.map(m => `<option value="${Utils.esc(m)}"${m === cur ? " selected" : ""}>${Utils.esc(m)}</option>`).join("");
-    this.dom.moduleFilter.value = cur;
+  // ---- Module filter (expandable popover: search + checkboxes + "select all") ----
+  // Internal representation: moduleFilter === null → everything is shown; Set → only the
+  // modules it contains. The checkbox UI, however, shows the explicit "selected = shown"
+  // model, so in the null state every checkbox is checked.
+
+  // The concrete set of currently selected modules (null filter = all modules selected).
+  effectiveModuleSet() {
+    const all = this.modulesList();
+    return this.moduleFilter ? new Set(all.filter(m => this.moduleFilter.has(m))) : new Set(all);
+  }
+
+  // Commit a new selection: if every module is checked, reset to null (= no filter).
+  setModuleSelection(set) {
+    const all = this.modulesList();
+    this.moduleFilter = (all.length > 0 && all.every(m => set.has(m))) ? null : set;
+    this.render();
+    this.syncURL();
+  }
+
+  // Renders the button's label, the filtered module list, and the "all" checkbox state.
+  renderModuleFilter() {
+    const d = this.dom;
+    if (!d.moduleMsList) return;
+    const all = this.modulesList();
+    const sel = this.effectiveModuleSet();
+
+    // Button label + "active filter" indicator.
+    d.moduleMsLabel.textContent =
+      this.moduleFilter === null ? I18n.t("ctrl.module.all")
+      : this.moduleFilter.size === 0 ? I18n.t("ctrl.module.none")
+      : this.moduleFilter.size === 1 ? [...this.moduleFilter][0]
+      : I18n.t("ctrl.module.n", { n: this.moduleFilter.size });
+    d.moduleMs.classList.toggle("active", this.moduleFilter !== null);
+
+    // List filtered by search.
+    const qq = this.moduleSearch.trim().toLowerCase();
+    const visible = all.filter(m => m.toLowerCase().includes(qq));
+    d.moduleMsList.innerHTML = visible.length
+      ? visible.map(m => `<label class="ms-opt"><input type="checkbox" data-module="${Utils.esc(m)}"${sel.has(m) ? " checked" : ""}><span>${Utils.esc(m)}</span></label>`).join("")
+      : `<div class="ms-empty">${Utils.esc(all.length ? I18n.t("ctrl.module.noMatch") : I18n.t("ctrl.module.empty"))}</div>`;
+
+    // "Select all" applies to the currently VISIBLE (filtered) modules.
+    const visSelected = visible.filter(m => sel.has(m)).length;
+    d.moduleMsAll.checked = visible.length > 0 && visSelected === visible.length;
+    d.moduleMsAll.indeterminate = visSelected > 0 && visSelected < visible.length;
+    d.moduleMsAll.disabled = visible.length === 0;
+  }
+
+  toggleModulePop() { this.moduleMsOpen ? this.closeModulePop() : this.openModulePop(); }
+
+  openModulePop() {
+    this.moduleMsOpen = true;
+    this.moduleSearch = "";
+    this.dom.moduleMsSearch.value = "";
+    this.dom.moduleMsPop.hidden = false;
+    this.dom.moduleMsBtn.setAttribute("aria-expanded", "true");
+    this.dom.moduleMs.classList.add("open");
+    this.renderModuleFilter();
+    this.dom.moduleMsSearch.focus();
+  }
+
+  closeModulePop() {
+    this.moduleMsOpen = false;
+    this.dom.moduleMsPop.hidden = true;
+    this.dom.moduleMsBtn.setAttribute("aria-expanded", "false");
+    this.dom.moduleMs.classList.remove("open");
   }
 
   // ---- Modal ----
   openModal(id) {
     const t = this.taskStore.currentTasks.find(x => x.id === id); if (!t) return;
-    this.clearModalBanner();   // friss taszk → ne maradjon egy korábbi hiba a modalban
+    this.clearModalBanner();   // fresh task → don't leave a stale error in the modal
     this.openTaskId = id; this.syncURL();
     this.taskModal.render(t, this.boardView.teamIndex, this.taskStore.currentTasks, {
-      writeEnabled: this.api.enabled, agents: this.agentsList(), modules: this.modulesList(),
+      writeEnabled: this.api.enabled, agents: this.agentsList(), modules: this.modulesList(), project: this.project,
     });
     this.taskModal.show();
   }
@@ -272,12 +332,27 @@ export class App {
   }
 
   // ---- Writing through the api/index.php bridge (task.sh), then an immediate re-poll ----
-  async runOps(ops, okMsg) {
+  // preserveChecklistInput: openModal() below rebuilds the whole mBody from scratch, which
+  // would otherwise wipe out a not-yet-submitted "new checklist item" (e.g. toggling one item
+  // while mid-typing another) — callers OTHER than the checklist-add submission itself pass
+  // true here so that text survives the rebuild. checklist-add does NOT set it: after a
+  // successful add, the input should go back to empty (it just did its job), not repopulate
+  // with the text that was just submitted. This is a narrow, local fix; the same re-render
+  // also collapses open note <details> and clears #actNote, which is a pre-existing, more
+  // general limitation of this full-rebuild render — not addressed here.
+  async runOps(ops, okMsg, { preserveChecklistInput = false } = {}) {
+    const pendingChecklistText = preserveChecklistInput ? (this.dom.mBody.querySelector("#checkAddInput")?.value || "") : "";
     try {
       this.setStatus("", I18n.t("app.sending"));
       await this.api.run(ops);
       await this.poll();                       // for the canonical state (task.sh is the source of truth)
-      if (this.openTaskId) this.openModal(this.openTaskId);  // modal re-renders with fresh data
+      if (this.openTaskId) {
+        this.openModal(this.openTaskId);  // modal re-renders with fresh data
+        if (pendingChecklistText) {
+          const inputEl = this.dom.mBody.querySelector("#checkAddInput");
+          if (inputEl) inputEl.value = pendingChecklistText;
+        }
+      }
       this.setStatus("ok", okMsg || I18n.t("app.done", { t: new Date().toLocaleTimeString(I18n.locale()) }));
       this.showBanner(null);
     } catch (e) {
@@ -314,7 +389,25 @@ export class App {
       case "note":
         if (!note) { this.showBanner(I18n.t("app.needNoteText")); return; }
         return this.runOps([{ cmd: "note", args: [id, note] }], I18n.t("app.noteAdded"));
+      case "checklist-add": {
+        const inputEl = this.dom.mBody.querySelector("#checkAddInput");
+        const text = inputEl ? inputEl.value.trim() : "";
+        if (!text) return;
+        return this.runOps([{ cmd: "checklist", args: [id, "add", text] }], I18n.t("app.checklistAdded"));
+      }
     }
+  }
+
+  // Checklist item toggle (done/undo) in the modal.
+  applyChecklistToggle(itemId, checked) {
+    const id = this.openTaskId; if (!id || !itemId) return;
+    return this.runOps([{ cmd: "checklist", args: [id, checked ? "done" : "undo", itemId] }], I18n.t(checked ? "app.checklistDone" : "app.checklistUndone"), { preserveChecklistInput: true });
+  }
+
+  // Checklist item removal in the modal.
+  applyChecklistRemove(itemId) {
+    const id = this.openTaskId; if (!id || !itemId) return;
+    return this.runOps([{ cmd: "checklist", args: [id, "rm", itemId] }], I18n.t("app.checklistRemoved"), { preserveChecklistInput: true });
   }
 
   // Inline field edit in the modal (priority / module / assignment).
@@ -381,10 +474,11 @@ export class App {
       const res = await fetch(`wrappers/${id}.sh`, { cache: "no-store" });
       if (!res.ok) throw new Error("HTTP " + res.status);
       const script = await res.text();
-      // A vágólapra egyetlen ÉRVÉNYES bash scriptet teszünk: a shebang marad az első sor, és
-      // közvetlenül utána KOMMENTKÉNT beszúrjuk a Claude Code agentnek szóló utasítást (mentse
-      // el ctm-<id>.sh néven, tegye futtathatóvá). Így „mentsd el ezt a teljes tartalmat"
-      // egyértelmű, a fájl azonnal futtatható, és a komment végrehajtáskor ártalmatlan.
+      // We put a single VALID bash script on the clipboard: the shebang stays the first
+      // line, and right after it we insert the instruction for the Claude Code agent AS A
+      // COMMENT (save it as ctm-<id>.sh, make it executable). This way "save this whole
+      // content" is unambiguous, the file is immediately runnable, and the comment is
+      // harmless when the script executes.
       const proj = this.projectStore.get(id);
       const label = (proj && proj.label) || id;
       const file = `ctm-${id}.sh`;
@@ -392,7 +486,7 @@ export class App {
         .split("\n").map(l => "# " + l).join("\n");
       const nl = script.indexOf("\n");
       const payload = nl >= 0
-        ? script.slice(0, nl + 1) + comment + "\n" + script.slice(nl + 1)   // shebang + utasítás-komment + a script többi része
+        ? script.slice(0, nl + 1) + comment + "\n" + script.slice(nl + 1)   // shebang + instruction comment + the rest of the script
         : comment + "\n" + script;
       await this.copyToClipboard(payload, btn);
     } catch (e) {
@@ -499,7 +593,24 @@ export class App {
     dom.qfReview.addEventListener("click", () => this.toggleQuick("review"));
     dom.qfActive.addEventListener("click", () => this.toggleQuick("active"));
     dom.qfBlocked.addEventListener("click", () => this.toggleQuick("blocked"));
-    dom.moduleFilter.addEventListener("change", () => { this.moduleFilter = dom.moduleFilter.value || null; this.render(); this.syncURL(); });
+    // Module filter popover: button, search, "all", individual checkboxes + outside-click/Escape.
+    dom.moduleMsBtn.addEventListener("click", () => this.toggleModulePop());
+    dom.moduleMsSearch.addEventListener("input", () => { this.moduleSearch = dom.moduleMsSearch.value; this.renderModuleFilter(); });
+    dom.moduleMsAll.addEventListener("change", () => {
+      const qq = this.moduleSearch.trim().toLowerCase();
+      const visible = this.modulesList().filter(m => m.toLowerCase().includes(qq));
+      const sel = this.effectiveModuleSet();
+      visible.forEach(m => dom.moduleMsAll.checked ? sel.add(m) : sel.delete(m));
+      this.setModuleSelection(sel);
+    });
+    dom.moduleMsList.addEventListener("change", e => {
+      const cb = e.target.closest("input[type=checkbox][data-module]"); if (!cb) return;
+      const sel = this.effectiveModuleSet();
+      cb.checked ? sel.add(cb.dataset.module) : sel.delete(cb.dataset.module);
+      this.setModuleSelection(sel);
+    });
+    document.addEventListener("click", e => { if (this.moduleMsOpen && !e.target.closest("#moduleMs")) this.closeModulePop(); });
+    document.addEventListener("keydown", e => { if (e.key === "Escape" && this.moduleMsOpen) { this.closeModulePop(); dom.moduleMsBtn.focus(); } });
     dom.notifyBtn.addEventListener("click", () => this.toggleNotify());
     dom.projectsBtn.addEventListener("click", () => this.openProjects());
     dom.projectsClose.addEventListener("click", () => this.closeProjects());
@@ -521,7 +632,7 @@ export class App {
     dom.board.addEventListener("click", e => {
       const dep = e.target.closest(".badge.dep-active, .badge.dep-done");
       if (dep && dep.dataset.team) { e.stopPropagation(); this.openByTeam(+dep.dataset.team); return; }
-      // Strukturált kapcsolat-badge (dependsOn/blocks) → a kapcsolódó taszk megnyitása.
+      // Structured relationship badge (dependsOn/blocks) → open the related task.
       const rel = e.target.closest(".badge.rel");
       if (rel && rel.dataset.task) { e.stopPropagation(); this.openModal(rel.dataset.task); return; }
       // Clicking a column header does NOT collapse the column (per user request).
@@ -534,18 +645,23 @@ export class App {
       if (ab) { e.preventDefault(); this.applyAction(ab.dataset.act); return; }
       const cp = e.target.closest(".copy-id");
       if (cp) { this.copyToClipboard(cp.dataset.copy || "", cp); return; }
+      const cr = e.target.closest(".check-rm");
+      if (cr) { this.applyChecklistRemove(cr.dataset.item); return; }
       const t = e.target.closest(".deplink"); if (!t) return;
       if (t.dataset.team) this.openByTeam(+t.dataset.team);
       else if (t.dataset.task) this.openModal(t.dataset.task);
     });
-    // Inline field edit (priority/module select, assignment input) in the modal.
+    // Inline field edit (priority/module select, assignment input) / checklist checkbox
+    // toggle in the modal.
     dom.mBody.addEventListener("change", e => {
-      const f = e.target.closest(".act-input"); if (!f) return;
-      this.applyField(f.dataset.field, f.value);
+      const f = e.target.closest(".act-input");
+      if (f) { this.applyField(f.dataset.field, f.value); return; }
+      const ct = e.target.closest(".check-toggle");
+      if (ct) { this.applyChecklistToggle(ct.dataset.item, ct.checked); return; }
     });
     // Persist the actor ("As …") across sessions.
     dom.actor.addEventListener("change", () => localStorage.setItem("tm.actor", dom.actor.value.trim()));
-    // A hibaüzenet elvetése (főoldali banner és modal-banner egyaránt).
+    // Dismiss the error message (both the main-page banner and the modal-banner).
     document.addEventListener("click", e => {
       if (!e.target.closest(".banner-close")) return;
       const host = e.target.closest(".banner, .modal-banner");

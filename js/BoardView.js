@@ -16,7 +16,7 @@ export class BoardView {
     const passQuick = t => !quickFilter || (quickFilter === "active" ? t.status !== "done" : t.status === quickFilter);
     return allTasks.filter(t => !t.isArchived).filter(passQuick).filter(t => {
       if (agentFilter && !agentFilter.has(Utils.agentKey(t))) return false;
-      if (moduleFilter && (t.module || "") !== moduleFilter) return false;
+      if (moduleFilter && !moduleFilter.has(t.module || "")) return false;
       if (!qq) return true;
       return [t.title, t.description, t.id, t.assignedAgentId, t.module, ...Utils.norm(t.notes)].join(" ").toLowerCase().includes(qq);
     });
@@ -67,8 +67,8 @@ export class BoardView {
       const cls = deps.active ? "dep-active" : "dep-done";
       return `<span class="badge ${cls}" data-team="${n}" title="${blk ? Utils.esc(blk.title) : "?"}">${deps.active ? "⛔" : "✅"} #${n}</span>`;
     }).join("");
-    // Strukturált kapcsolatok (dependsOn): a kártyán EGY összesítő badge, a kapcsolódó
-    // jegyek darabszámával. A teljes lista a modalban látszik (kártyára kattintva).
+    // Structured relationships (dependsOn): ONE summary badge on the card, with the
+    // count of related tickets. The full list is shown in the modal (on card click).
     const dependsOn = Array.isArray(t.dependsOn) ? t.dependsOn : [];
     const blocks = this.blocksIndex ? (this.blocksIndex.get(t.id) || []) : [];
     const relCount = dependsOn.length + blocks.length;
@@ -151,9 +151,9 @@ export class BoardView {
     const tasks = this.visibleTasks(allTasks, state);
 
     this.teamIndex = new Map();
-    // Strukturált kapcsolatok (task.sh dependsOn): id → taszk, és a fordított él (ki függ tőle).
+    // Structured relationships (task.sh dependsOn): id → task, and the reverse edge (who depends on it).
     this.idIndex = new Map();
-    this.blocksIndex = new Map();   // id → [taszkok, amelyek dependsOn-ja tartalmazza]
+    this.blocksIndex = new Map();   // id → [tasks whose dependsOn contains it]
     allTasks.forEach(t => { const n = Utils.parseTeam(t); if (n != null) this.teamIndex.set(n, t); this.idIndex.set(t.id, t); });
     allTasks.forEach(t => (Array.isArray(t.dependsOn) ? t.dependsOn : []).forEach(d => {
       if (!this.blocksIndex.has(d)) this.blocksIndex.set(d, []);

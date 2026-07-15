@@ -38,6 +38,26 @@ const DARK_PILL_STATUSES = new Set(["review", "done"]);
 // badges too (any string hashes to a stable color, not just agent ids).
 const AGENT_PALETTE = ["#5b8def", "#46c07f", "#d99a3f", "#b57cf6", "#45b5c4", "#e2739b", "#e0894e", "#2dd4bf", "#8b8ff0"];
 
+// Note "kind" dictionary: recognized ALL-CAPS prefix stems (Hungarian + English, accented +
+// unaccented) -> CSS badge class, matched word-initial (startsWith) on the FIRST word of the
+// prefix, first match wins. Derived from the real prefix usage across every project's
+// tasks.json (794 notes, 127 with a recognizable prefix) — see noteKind() below.
+// KEEP IN SYNC with the enum listed in `engine/task.sh`'s `note` command help text: there is
+// no shared data file between the bash engine and this JS file (yet), so both lists must be
+// updated together by hand when either changes.
+const NOTE_KIND_STEMS = [
+  { cls: "k-research", stems: ["kutat", "research"] },
+  { cls: "k-plan", stems: ["terv", "plan"] },
+  { cls: "k-decision", stems: ["dönt", "dont", "decision"] },
+  { cls: "k-impl", stems: ["impl", "javít", "javit", "fix", "refaktor", "refactor"] },
+  { cls: "k-done", stems: ["kész", "kesz", "done"] },
+  { cls: "k-block", stems: ["block", "blokk"] },
+  { cls: "k-warn", stems: ["figyelem", "warning", "warn"] },
+  { cls: "k-verify", stems: ["verifik", "megerősít", "megerosit", "teszt", "test", "verif"] },
+  { cls: "k-user", stems: ["user", "felhasználó", "felhasznalo"] },
+  { cls: "k-handoff", stems: ["átadás", "atadas", "handoff"] },
+];
+
 /** General helper functions (as static class methods). */
 export class Utils {
   static esc(s) {
@@ -48,11 +68,14 @@ export class Utils {
     return !notes ? [] : (Array.isArray(notes) ? notes.map(n => typeof n === "string" ? n : (n && (n.text || n.note)) || "").filter(Boolean) : [String(notes)]);
   }
 
-  /** Like norm(), but keeps the timestamp: [{ at, text }, ...] (empty text dropped). */
+  /** Like norm(), but keeps the timestamp + task.sh's by/files (older notes simply lack them,
+   *  hence the defaults below): [{ at, text, by, files }, ...] (empty text dropped). */
   static normDetailed(notes) {
-    if (!Array.isArray(notes)) return Utils.norm(notes).map(text => ({ at: null, text }));
+    if (!Array.isArray(notes)) return Utils.norm(notes).map(text => ({ at: null, text, by: null, files: [] }));
     return notes
-      .map(n => typeof n === "string" ? { at: null, text: n } : { at: (n && n.at) || null, text: (n && (n.text || n.note)) || "" })
+      .map(n => typeof n === "string"
+        ? { at: null, text: n, by: null, files: [] }
+        : { at: (n && n.at) || null, text: (n && (n.text || n.note)) || "", by: (n && n.by) || null, files: Array.isArray(n && n.files) ? n.files : [] })
       .filter(x => x.text);
   }
 
@@ -66,12 +89,8 @@ export class Utils {
     if (!m) return null;
     const label = m[1].trim();
     const w = label.split(/\s+/)[0].toLowerCase();
-    let cls = "k-other";
-    if (w.startsWith("kutat") || w.startsWith("research")) cls = "k-research";
-    else if (w.startsWith("terv") || w.startsWith("plan")) cls = "k-plan";
-    else if (w.startsWith("dönt") || w.startsWith("dont") || w.startsWith("decision")) cls = "k-decision";
-    else if (w.startsWith("impl") || w.startsWith("javít") || w.startsWith("javit") || w.startsWith("fix")) cls = "k-impl";
-    return { label, cls };
+    const hit = NOTE_KIND_STEMS.find(({ stems }) => stems.some(s => w.startsWith(s)));
+    return { label, cls: hit ? hit.cls : "k-other" };
   }
 
   static agentKey(t) {
