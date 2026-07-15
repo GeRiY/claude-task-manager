@@ -5,7 +5,7 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.2.1] - 2026-07-15
 
 ### Changed
 - **Fixed a stale, self-contradicting claim about agent naming in both READMEs.** The
@@ -67,9 +67,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   this project (board bound to `127.0.0.1` only, write-endpoint command allowlist,
   registered-project validation) collected in one place instead of only living inside the
   README's Security notes section.
-- `CONTRIBUTING.md` — no build step, running the board locally, the READMEs'-must-stay-
-  mirrored rule, the English-only convention (except `README.hu.md` and `js/i18n.js`),
-  and that `data/` is local live state that's never committed.
+- `CONTRIBUTING.md` — no build step, running the board locally, the mirrored-files rule,
+  the English-only convention, and that `data/` is local live state that's never
+  committed. Both rules are deliberately stated as **patterns rather than enumerations**
+  ("every `X.md` / `X.hu.md` pair", "any `*.hu.md` file") — with six mirrored pairs
+  instead of one, a rule spelled out as a list of filenames goes stale the moment someone
+  adds the next mirrored doc, which is exactly the failure this release is elsewhere
+  cleaning up after.
 - `.github/ISSUE_TEMPLATE/bug_report.md` and `feature_request.md`.
 - **Hungarian counterparts for the four new reference docs, plus `SECURITY.md` and
   `CONTRIBUTING.md`** — `docs/ARCHITECTURE.hu.md`, `docs/COMMANDS.hu.md`,
@@ -84,11 +88,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Hungarian), matching the badge style already used at the top of
   `README.md`/`README.hu.md` — every one now links directly to its other-language
   counterpart instead of leaving a reader to find it by guessing a URL.
-- **`CONTRIBUTING.md`'s mirroring and English-only rules are now stated as patterns, not
-  enumerations.** With six mirrored `.md`/`.hu.md` pairs instead of one, listing each pair
-  by name in prose was already showing the seams; the rule now reads "every `X.md` /
-  `X.hu.md` pair" and "any `*.hu.md` file" instead, so adding the next mirrored doc doesn't
-  require also remembering to update this list.
 - **Both READMEs' Documentation lists now link `CONTRIBUTING.md`/`CONTRIBUTING.hu.md`.**
   It existed and was mirrored into Hungarian, but neither README pointed to it, so a reader
   had no way to discover it short of browsing the repo root.
