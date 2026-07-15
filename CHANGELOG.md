@@ -5,6 +5,28 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.2] - 2026-07-15
+
+### Changed
+- **Regenerated every screenshot and the live-update GIF.** All of them still showed the
+  pre-[1.2.0] teammate names (`backend-developer`, `frontend-developer`, `infra-developer`)
+  — agents that no longer exist — so the first thing a visitor saw contradicted the docs
+  directly below it. They now show the real base set (`backend-dev`, `frontend-dev`,
+  `investigator`, `playwright-tester`, plus the `main` coordinator), and the demo board's
+  timeline was re-based to the capture date, so the cards read "5 h ago" rather than
+  presenting a board that had visibly been dead for a week.
+- **The task-detail screenshots now actually show what [1.2.0] added.** The old ones
+  predated the features: the modal now demonstrates the checklist (with a ticked item), the
+  Files list (rendered project-relative, `/app/Auth/SsoController.php`), a note accordion
+  in both its open and collapsed state, and the `by` attribution on notes and history
+  entries.
+
+### Removed
+- **`docs/screenshots/demo-walkthrough.gif` and `demo-hu-context.png`.** Neither was
+  referenced by any README after the [1.2.1] restructure, and both still showed the retired
+  agent names — dead weight that could only ever go further out of date. Together they were
+  roughly 920 KB of the screenshot directory, which is down from 2.2 MB to 1.2 MB.
+
 ## [1.2.1] - 2026-07-15
 
 ### Changed
