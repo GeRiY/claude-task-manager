@@ -2,8 +2,9 @@
 /**
  * api/index.php — the task-manager board's WRITE ENDPOINT (multi-project version).
  *
- * The PHP built-in server runs this file directly. Started via docker compose (see
- * docker-compose.yml), or manually (docroot = the project root):
+ * Apache's mod_php runs this file directly. Started via docker compose (see
+ * docker-compose.yml + Dockerfile: Apache with the project root as its docroot), or
+ * manually with PHP's built-in server (docroot = the project root):
  *   php -S localhost:3333 -t /Users/mgeri1993/code/projects/claude-task-manager
  *   → board:    http://localhost:3333/
  *   → endpoint: http://localhost:3333/api/index.php

@@ -17,5 +17,7 @@ services:
     volumes:
       - .:/app
     environment:
-      - PHP_CLI_SERVER_WORKERS=4
-    command: ["sh", "-c", "php -S 0.0.0.0:${CTM_PORT:-3333} -t /app"]
+      # Az Apache ezt a portot hallgatja a konténeren belül (a Dockerfile ports.conf-ja és a
+      # docker/apache.conf vhostja is ${CTM_PORT}-ra hivatkozik) — így a konténer- és a
+      # host-oldali port ugyanaz marad, mint a korábbi php -S-nél.
+      - CTM_PORT=${CTM_PORT:-3333}

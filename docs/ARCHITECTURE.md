@@ -37,7 +37,7 @@ event emission right.
 
 `task.sh` calls (all agent work) run as **plain host-bash scripts** — no docker, no
 container, no network. Only the browser **board** and its **write API** (`api/index.php`)
-are containerized (PHP's built-in server via docker compose). This split is why a teammate
+are containerized (Apache + mod_php via docker compose). This split is why a teammate
 agent can update tasks in a session where docker isn't even running.
 
 ## Components
@@ -62,8 +62,8 @@ agent can update tasks in a session where docker isn't even running.
 - **`data/<id>/`** — the projects' actual tables (`tasks.json`, `context.json`,
   `events.jsonl`, `.cursors/`, `.board-lang`) — they live HERE, in claude-task-manager's own
   repo, not in the target project.
-- **`index.html` + `js/*` + `style.css`** — the browser board. Served by a PHP built-in
-  server via docker compose; the Source selector switches between the projects registered
+- **`index.html` + `js/*` + `style.css`** — the browser board. Served by Apache (mod_php)
+  via docker compose; the Source selector switches between the projects registered
   in `data/projects.json`. See [BOARD.md](https://github.com/GeRiY/claude-task-manager/blob/main/docs/BOARD.md).
 - **`api/index.php`** — the board's WRITE endpoint: runs the allowlisted `task.sh` commands
   above with the selected project's `TM_DIR` baked in.

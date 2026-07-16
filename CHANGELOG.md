@@ -5,6 +5,34 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2026-07-16
+
+### Changed
+- **The board is now served by Apache + mod_php instead of PHP's built-in server.** The
+  built-in server ships with a warning against using it beyond development, and the board
+  was hitting the reason why: it processes requests essentially one at a time, so a single
+  slow write could stall the polling that keeps the board live. Apache serves the static
+  board files (`index.html`, `js/*`, `style.css`, `data/*.json`) itself and hands only
+  `api/index.php` to mod_php, so reads no longer queue behind writes.
+- **The image base moved from `php:8.3-cli-alpine` to `php:8.3-apache`** (Debian). `bash`
+  is already present there, so only `jq` — the JSON engine behind `engine/task.sh`, which
+  the PHP write endpoint shells out to — still needs installing. **Existing deployments
+  must rebuild the image** (`ctm down && docker compose build`); a stale image will still
+  run the old `php -S` command. The npm package now ships the new `docker/` directory
+  alongside the Dockerfile, so building from an npm install works the same as from a clone.
+- **The listening port stays configurable through `CTM_PORT` (default 3333).** Apache
+  resolves `${CTM_PORT}` from the container environment at config-parse time rather than
+  having it baked in at build time, so `ctm up <port>` behaves exactly as before. The
+  container keeps running as the host UID:GID, which is why the port must stay above 1024
+  — a non-root Apache cannot bind a privileged port.
+
+### Security
+- **Dotfiles are no longer reachable over HTTP.** The docroot is the repo root, which puts
+  `.env` (holding `CTM_PORT`/`CTM_UID`) and `.git/` inside the web root; the vhost now
+  denies any request for a path starting with a dot, for both files and directories.
+- **Directory listings are off** (`Options -Indexes`), so a request for a directory without
+  an index file returns 403 rather than enumerating its contents.
+
 ## [1.2.2] - 2026-07-15
 
 ### Changed

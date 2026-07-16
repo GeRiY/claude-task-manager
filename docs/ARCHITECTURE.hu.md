@@ -37,7 +37,7 @@ lockolást, a history-t és az esemény-kibocsátást.
 
 A `task.sh` hívások (minden agent-munka) **egyszerű host-bash szkriptként** futnak —
 docker, konténer és hálózat nélkül. Kizárólag a böngészős **board** és annak **write
-API**-ja (`api/index.php`) van konténerizálva (PHP beépített szervere docker
+API**-ja (`api/index.php`) van konténerizálva (Apache + mod_php docker
 compose-on keresztül). Ez a szétválasztás teszi lehetővé, hogy egy teammate agent olyan
 sessionben is frissítsen taskokat, ahol a docker nem is fut.
 
@@ -64,7 +64,7 @@ sessionben is frissítsen taskokat, ahol a docker nem is fut.
 - **`data/<id>/`** — a projektek tényleges táblái (`tasks.json`, `context.json`,
   `events.jsonl`, `.cursors/`, `.board-lang`) — ITT élnek, a claude-task-manager saját
   repójában, nem a célprojektben.
-- **`index.html` + `js/*` + `style.css`** — a böngészős board. PHP beépített szerver
+- **`index.html` + `js/*` + `style.css`** — a böngészős board. Apache (mod_php)
   szolgálja ki docker compose-on keresztül; a Source selector a `data/projects.json`-ban
   regisztrált projektek között vált. Lásd
   [BOARD.hu.md](https://github.com/GeRiY/claude-task-manager/blob/main/docs/BOARD.hu.md).
