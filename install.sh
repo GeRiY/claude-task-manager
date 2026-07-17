@@ -9,7 +9,8 @@
 #     own TM_DIR baked in; no docker needed, plain host-bash script)
 #   - .claude/skills/task-manager/SKILL.md  — the Claude Code skill documentation (from this
 #     project's own "SKILL.md" template)
-#   - .claude/agents/ctm-*.md               — generic teammate agent definitions
+#   - .claude/agents/*.md                   — generic teammate agent definitions (the roster:
+#                                             engine/roster.sh + templates/agents-manifest.json)
 #   - .claude/hooks/allow-task-sh.sh + notify-inbox.sh — PreToolUse/PostToolUse hooks
 #     (auto-allow + inbox notification), registered in .claude/settings.json
 # and extends the target project's .claude/settings.local.json Bash allowlist with the
@@ -39,11 +40,22 @@ die() { echo "error: $*" >&2; exit 1; }
 source "$SCRIPT_DIR/engine/check-update.sh"
 check_for_updates "$SCRIPT_DIR"
 
+# shellcheck source=engine/roster.sh
+# Provides roster_agent_names / roster_agent_field / roster_area_field — the authoritative
+# roster (templates/agents-manifest.json + the standalone templates/agents/*.md.tmpl set).
+source "$SCRIPT_DIR/engine/roster.sh"
+
 # shellcheck source=engine/agent-tools.sh
 # Provides resolve_agent_tools <name> [target-dir] — the per-agent tools allow-list baked into
 # each generated agent's frontmatter (config: templates/agent-tools.json, project override:
 # <target>/.claude/agent-tools.json).
 source "$SCRIPT_DIR/engine/agent-tools.sh"
+
+# shellcheck source=engine/agent-block.sh
+# Provides agent_block_tempfile <name> [target-dir] — the optional free-text "project block"
+# baked into each generated agent's body (config: templates/agent-blocks/, project override:
+# <target>/.claude/agent-blocks/).
+source "$SCRIPT_DIR/engine/agent-block.sh"
 
 command -v jq >/dev/null 2>&1 || die "jq is not installed (required for this script)."
 
@@ -127,26 +139,86 @@ if confirm_overwrite "$SKILL_DIR/SKILL.md"; then
     "$SCRIPT_DIR/templates/SKILL.md.tmpl" > "$SKILL_DIR/SKILL.md"
 fi
 
-# 3) Generic ctm-* teammate definitions (.claude/agents/) — NOT project-specific; they read
-# the concrete stack/conventions from the target project's own documentation.
+# 3) Generic teammate definitions (.claude/agents/) — NOT project-specific; they read the
+# concrete stack/conventions from the target project's own documentation.
+#
+# Two sources, one roster (engine/roster.sh):
+#   - the tiered dev set (be-/fe- x junior/medior/senior) — ONE template (agents/dev.md.tmpl)
+#     rendered once per templates/agents-manifest.json entry, with the matching
+#     templates/agent-tiers/<tier>.md fragment spliced in at __TIER_SCOPE__. Six near-identical
+#     files are generated, but the workflow text exists exactly once.
+#   - the standalone agents (ctm-investigator, ctm-playwright-tester) — their own one-off templates.
 AGENTS_DIR="$TARGET_DIR/.claude/agents"
 mkdir -p "$AGENTS_DIR"
 installed_agents=()
-for tmpl in "$SCRIPT_DIR"/templates/agents/*.md.tmpl; do
-  [[ -e "$tmpl" ]] || continue
-  name="$(basename "$tmpl" .md.tmpl)"
-  out="$AGENTS_DIR/$name.md"
-  if confirm_overwrite "$out"; then
-    agent_tools="$(resolve_agent_tools "$name" "$TARGET_DIR")"
-    sed \
-      -e "s#__PROJECT_LABEL__#$LABEL#g" \
-      -e "s#__PROJECT_ID__#$PROJECT_ID#g" \
-      -e "s#__TASK_SH_PATH__#$SKILL_DIR/task.sh#g" \
-      -e "s#__AGENT_TOOLS__#$agent_tools#g" \
-      "$tmpl" > "$out"
-    installed_agents+=("$name")
+
+# Escape a manifest-derived value for use as a sed `s#...#VALUE#` replacement.
+sed_escape() { printf '%s' "$1" | sed -e 's/[&#\]/\\&/g'; }
+
+# render_agent <name> <template> [tier]
+# Renders one agent definition. With a <tier>, the tier fragment is spliced in FIRST (raw,
+# placeholders intact) so the single substitution pass below covers the fragment's text too.
+render_agent() {
+  local name="$1" tmpl="$2" tier="${3:-}"
+  local out="$AGENTS_DIR/$name.md"
+  confirm_overwrite "$out" || return 0
+
+  local body_file block_file agent_tools
+  body_file="$(mktemp)"
+  if [[ -n "$tier" ]]; then
+    local frag="$SCRIPT_DIR/templates/agent-tiers/$tier.md"
+    [[ -f "$frag" ]] || die "missing tier fragment: $frag"
+    sed -e "/^__TIER_SCOPE__\$/r $frag" -e "/^__TIER_SCOPE__\$/d" "$tmpl" > "$body_file"
+  else
+    cat "$tmpl" > "$body_file"
   fi
-done
+
+  agent_tools="$(resolve_agent_tools "$name" "$TARGET_DIR")"
+  block_file="$(agent_block_tempfile "$name" "$TARGET_DIR")"
+
+  # Manifest attributes — all empty for a standalone agent, whose template has no such
+  # placeholders, so the substitutions are simply no-ops there.
+  local area model color
+  area="$(roster_agent_field "$name" area)"
+  model="$(roster_agent_field "$name" model)"
+  color="$(roster_agent_field "$name" color)"
+
+  sed \
+    -e "s#__PROJECT_LABEL__#$(sed_escape "$LABEL")#g" \
+    -e "s#__PROJECT_ID__#$(sed_escape "$PROJECT_ID")#g" \
+    -e "s#__TASK_SH_PATH__#$SKILL_DIR/task.sh#g" \
+    -e "s#__AGENT_TOOLS__#$(sed_escape "$agent_tools")#g" \
+    -e "s#__PROJECT_CLAUDE_DIR__#$TARGET_DIR/.claude#g" \
+    -e "s#__AGENT_NAME__#$name#g" \
+    -e "s#__TIER__#$tier#g" \
+    -e "s#__MODEL__#$model#g" \
+    -e "s#__COLOR__#$color#g" \
+    -e "s#__AREA_LABEL__#$(sed_escape "$(roster_area_field "$area" label)")#g" \
+    -e "s#__AREA_WORD__#$(sed_escape "$(roster_area_field "$area" word)")#g" \
+    -e "s#__AREA_TAG__#$(sed_escape "$(roster_area_field "$area" tag)")#g" \
+    -e "s#__AREA_JUNIOR__#$(sed_escape "$(roster_area_field "$area" junior)")#g" \
+    -e "s#__AREA_MEDIOR__#$(sed_escape "$(roster_area_field "$area" medior)")#g" \
+    -e "s#__AREA_SENIOR__#$(sed_escape "$(roster_area_field "$area" senior)")#g" \
+    -e "s#__PEER_MEDIOR__#$(sed_escape "$(roster_area_field "$area" peerMedior)")#g" \
+    -e "s#__AREA_EXAMPLE_FILES__#$(sed_escape "$(roster_area_field "$area" exampleFiles)")#g" \
+    -e "s#__AREA_WORK_NOTE__#$(sed_escape "$(roster_area_field "$area" workNote)")#g" \
+    -e "s#__AREA_DOMAIN_NOTE__#$(sed_escape "$(roster_area_field "$area" domainNote)")#g" \
+    "$body_file" | sed -e "/^__AGENT_BLOCK__\$/r $block_file" -e "/^__AGENT_BLOCK__\$/d" > "$out"
+
+  rm -f "$block_file" "$body_file"
+  installed_agents+=("$name")
+}
+
+DEV_TMPL="$SCRIPT_DIR/templates/agents/dev.md.tmpl"
+while IFS= read -r name; do
+  [[ -n "$name" ]] || continue
+  render_agent "$name" "$DEV_TMPL" "$(roster_agent_field "$name" tier)"
+done < <(roster_manifest_names)
+
+while IFS= read -r name; do
+  [[ -n "$name" ]] || continue
+  render_agent "$name" "$SCRIPT_DIR/templates/agents/$name.md.tmpl"
+done < <(roster_standalone_names)
 
 # 4) Hooks (.claude/hooks/) — PreToolUse auto-allow + PostToolUse inbox notification for
 # task.sh calls, registered additively in .claude/settings.json.

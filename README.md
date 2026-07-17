@@ -84,16 +84,16 @@ ctm init                          # id/label = the folder name
 ```
 
 This writes `.claude/skills/task-manager/task.sh` (a docker-free wrapper), the installed
-`SKILL.md`, the four base teammate agents (see below), and the Bash-permission hooks that
+`SKILL.md`, the eight base teammate agents (see below), and the Bash-permission hooks that
 let those agents call `task.sh` without a prompt. Re-running `ctm init` is idempotent and
 never touches `data/<id>/` or your own custom `tm-*` agent files.
 
 ### 4. Everyday `task.sh` examples
 
 ```bash
-task.sh next --claim --as backend-dev            # take the top ready todo, race-safe
-task.sh status fix-login in_progress --as backend-dev
-task.sh review fix-login main "done, please review" --as backend-dev
+task.sh assign fix-login ctm-be-medior --as main     # route it — a teammate cannot take it otherwise
+task.sh next --claim --as ctm-be-medior              # take your top ready todo, race-safe
+task.sh review fix-login main "done, please review" --as ctm-be-medior
 task.sh list --module auth --as main
 ```
 
@@ -108,14 +108,23 @@ ctm rm <id> [--force]     # deregister a project (data + wrapper) — asks first
 
 ## Teammates
 
-`ctm init` installs four base teammate agents — **`backend-dev`**, **`frontend-dev`**,
-**`investigator`**, **`playwright-tester`** — whose launch name *is* their task-manager
-identity, plus a `main` coordinator agent that assigns work and reviews results. Work
-flows `todo → in_progress → review → done`; a teammate never closes its own task as
-`done`, it routes to `review` and main decides. Need a role beyond the base four? `ctm
-agent add <name>` creates a custom `tm-*` agent.
+`ctm init` installs eight base teammate agents whose launch name *is* their task-manager
+identity, plus a `main` coordinator agent that assigns work and reviews results:
 
-Full model — roles, the `tm-*` convention, per-agent tool allow-lists, and how many
+- a **tiered dev roster** — **`ctm-be-junior`**, **`ctm-be-medior`**, **`ctm-be-senior`** for backend and
+  **`ctm-fe-junior`**, **`ctm-fe-medior`**, **`ctm-fe-senior`** for frontend, where **the tier is the
+  model** (junior = haiku, medior = sonnet, senior = opus). The **medior is the default
+  workhorse**; the opus seniors may only be launched with your explicit permission.
+- **`ctm-investigator`** (read-only code investigation) and **`ctm-playwright-tester`** (verifying
+  behavior in a real browser).
+
+The roster is a **menu, not a launch list** — still run 3-4 at a time. Work flows
+`todo → in_progress → review → done`; a teammate never closes its own task as `done`, it
+routes to `review` and main decides. Main must `assign` a task explicitly — `claim` is
+strict, and only the assignee may take it. Need a role beyond the base roster? `ctm agent
+add <name>` creates a custom `tm-*` agent.
+
+Full model — the tiers, the `tm-*` convention, per-agent tool allow-lists, and how many
 teammates to run at once: **[docs/AGENTS.md](https://github.com/GeRiY/claude-task-manager/blob/main/docs/AGENTS.md)**.
 
 ## Language / i18n
@@ -127,8 +136,9 @@ and in the URL, so a board link is shareable in a specific language.
 ![Kanban board, Hungarian — proof of the bilingual UI](https://raw.githubusercontent.com/GeRiY/claude-task-manager/main/docs/screenshots/demo-hu-board.png)
 
 The language is **not** stored in any task or note — it lives in a small
-`data/<id>/.board-lang` file, and `engine/task.sh` reads it on every call to remind the
-calling agent (via stderr) which language a human was using on the board.
+`data/<id>/.board-lang` file. `engine/task.sh lang` reads it and reports which language a
+human was using on the board; every generated agent template requires the agent to call
+this once per session (see the "task.sh — calling rules" section of its own definition).
 
 ## Staying up to date
 

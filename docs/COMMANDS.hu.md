@@ -18,7 +18,7 @@ task.sh help
 ## A `--as <agent>` szabály
 
 **Minden nem-meta parancs megköveteli a `--as <agent-name>`-et** — a saját identitásodat (a
-main agent a `--as main`-t használja; egy teammate a saját nevét, pl. `--as backend-dev`).
+main agent a `--as main`-t használja; egy teammate a saját nevét, pl. `--as ctm-be-medior`).
 Ez kerül rögzítésre minden note/history bejegyzés és event `by` mezőjeként, és ebből tudja
 az inbox hook, kinek kell kézbesítenie a friss eventeket. Enélkül egy nem-meta parancs
 egyszerűen elhasal.
@@ -47,10 +47,22 @@ A **meta parancsok mentesülnek** (nem kell `--as`): `help`, `inbox`, `init`, `v
 
 | Parancs | Mit csinál |
 |---|---|
-| `assign <id> <agent>` | Az `assignedAgentId` közvetlen beállítása. |
-| `claim <id> [agent]` | **Atomikus, race-safe**: egy `todo`-t `in_progress`-re fordít, és a `--as` hívóhoz rendeli egyetlen lockolt írásban; elutasít, ha egy másik agent már elvette. |
-| `next [--claim]` | A következő ajánlott `todo` (nincs nyitott függősége), prioritás szerint. A `--claim` atomikusan elveszi, és a következő jelöltre lép, ha az elsőt közben más elkapta a race-ablakban. |
+| `assign <id> <agent>` | Az `assignedAgentId` közvetlen beállítása. **Kötelező, mielőtt bárki claimelhetne.** |
+| `claim <id> [agent]` | **Atomikus, race-safe**: egy **a `--as` hívóhoz rendelt** `todo`-t fordít `in_progress`-re egyetlen lockolt írásban; elutasít, ha egy másik agent már elvette. |
+| `next [--claim]` | A következő ajánlott `todo` (nincs nyitott függősége), prioritás szerint — **a `--as` hívóra szűkítve**. A `--claim` atomikusan elveszi, és a következő jelöltre lép, ha az elsőt közben más elkapta a race-ablakban. |
 | `handoff <id> <to> [note]` | Átrendeli `<to>`-hoz, és egy **irányított** inbox-pinget küld neki (`‼️`) — ez az explicit módja annak, hogy egy findinget/bugot/sub-taskot egy konkrét teammate-hez irányíts. |
+
+### A `claim` szigorú: csak a hozzárendelt agent claimelhet
+
+Egy **másvalakihez** rendelt, vagy **senkihez** sem rendelt task elutasításra kerül. Nincs
+tag-alapú önkiszolgálás — egy `backend` tag **nem** teszi a taskot a tiéddé. **A mainnek
+minden taskot explicit módon `assign`-olnia kell** (vagy `handoff`-fal routolnia), különben
+sosem lehet elvenni.
+
+A `next` ugyanezt a szabályt követi: **a `--as` hívóra van szűkítve** — csak az adott
+agenthez rendelt todókat listázza (és a `--claim` csak azokat veszi el), pontosan azt, amit
+a `claim` ténylegesen engedne, így sosem hirdetheti más agent munkáját. A készen álló
+munkák szűkítetlen áttekintéséhez a main a `list todo`-t használja.
 
 ## Review
 
@@ -83,7 +95,7 @@ alá tartozik.
 | Parancs | Mit csinál |
 |---|---|
 | `checklist <id>` | A task checklist-elemeinek listázása. |
-| `checklist <id> add <text>...` | Egy vagy több elem hozzáadása (stabil `c<n>` id-k, sosem újrahasznosítva). |
+| `checklist <id> add <text>...` | Egy vagy több elem hozzáadása (stabil `c<n>` id-k, sosem újrahasznosítva). Minden elem egy rövid MONDAT legyen, ne egy-két szavas címke — "patcheld a null-check-et a Login.php-ban", ne "patch". |
 | `checklist <id> done <item-id>...` / `undo <item-id>...` | Elemek kipipálása / visszavonása. |
 | `checklist <id> rm <item-id>...` | Elemek eltávolítása. |
 
@@ -106,11 +118,11 @@ a változás gépileg olvasható mutatója, a szabadszöveges note-on kívül ta
 | Parancs | Mit csinál |
 |---|---|
 | `list [status] [filters]` | Tömör lista: `<id> [status] (prio) @module title #tag`. Szűrők: `--tag`, `--agent`, `--priority`, `--module`, `--all` (archiváltakkal együtt), `--json`. |
-| `ids [status]` | Csak az id-k, soronként egy. |
+| `ids [status] [--all]` | Csak az id-k, soronként egy. Az archivált taskok kimaradnak, hacsak nincs `--all`. |
 | `get <id>` | Egy task teljes JSON-ja (nem a teljes fájl). |
 | `field <id> <field>` | Egy task egy mezőjének nyers értéke. |
-| `summary` | Darabszám státuszonként + összesen. |
-| `find <text>` | Cím/leírás keresés (kis- és nagybetűt nem megkülönböztetve), tömör lista. |
+| `summary [--all]` | Darabszám státuszonként + összesen. Az archivált taskok kimaradnak, hacsak nincs `--all`. |
+| `find <text> [--all]` | Cím/leírás keresés (kis- és nagybetűt nem megkülönböztetve), tömör lista. Az archivált taskok kimaradnak, hacsak nincs `--all`. |
 | `deps <id>` | Mire vár egy task, és mit blokkol. |
 | `history <id>` | Egy task history-bejegyzései, tömören. |
 
@@ -135,12 +147,15 @@ a változás gépileg olvasható mutatója, a szabadszöveges note-on kívül ta
 ```bash
 task.sh list todo --priority high --as main
 task.sh add fix-login "Login javítás" "A login 500-at ad vissza" --as main
-task.sh next --claim --as backend-dev            # a legfontosabb kész todo elvétele, race-safe
-task.sh handoff fix-login backend-dev "404 az export útvonalon" --as playwright-tester
-task.sh review fix-login main "kész, kérlek review-zd" --as backend-dev
+task.sh assign fix-login ctm-be-medior --as main      # routolás — enélkül egy teammate nem tudja elvenni
+task.sh next --claim --as ctm-be-medior               # a saját legfontosabb kész todo-d elvétele, race-safe
+task.sh claim fix-login --as ctm-be-medior            # egy konkrét, SAJÁT todo elvétele -> in_progress
+task.sh handoff fix-login ctm-be-medior "404 az export útvonalon" --as ctm-playwright-tester
+task.sh review fix-login main "kész, kérlek review-zd" --as ctm-be-medior
 task.sh review-queue main --as main               # mi vár a jóváhagyásomra
 task.sh stale --older-than 24h --as main          # elakadt in_progress/review taskok
-task.sh checklist fix-login add "útvonal hozzáadása" "űrlap bekötése" --as main
-task.sh files fix-login add /abs/path/to/file.php --as backend-dev
-task.sh inbox backend-dev                         # (meta: nincs --as) friss események
+task.sh checklist fix-login add "add hozzá a /discount útvonalat az API-hoz" "kösd be a discount mezőt a checkout űrlapba" --as main
+  # minden elem egy rövid MONDAT legyen, ne egy-két szavas címke — az "útvonal" senkinek nem mond semmit
+task.sh files fix-login add /abs/path/to/file.php --as ctm-be-medior
+task.sh inbox ctm-be-medior                           # (meta: nincs --as) friss események
 ```

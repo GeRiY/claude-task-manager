@@ -14,6 +14,26 @@ table (tasks.json/context.json/events.jsonl) lives under the claude-task-manager
 that targets that data directory — the calling pattern otherwise stays exactly the
 same as before.
 
+> **START HERE — before your first `task.sh` call this session, run:**
+> `__TASK_SH_PATH__ guide`
+> This prints scenario-driven "when X happens, run Y" workflows for both main and teammates —
+> it is what actually teaches you to use every part of this tool, not just a flag list (that's
+> `task.sh help`, for later reference). Read it once per session, first thing.
+
+> **HARD RULE — you are a USER of claude-task-manager here, not its developer.** This
+> project's `task.sh` is a thin wrapper around a separate, shared tool that lives in its own
+> repo elsewhere on disk (the wrapper's own `exec` line reveals that absolute path — finding
+> it doesn't make it yours to explore). Treat `task.sh` as a black box and drive it only
+> through its documented commands (`guide`, `help`, and everything below).
+> **Never `Read`/`Grep`/`Glob`/`cat` the claude-task-manager tool's own source
+> (its `engine/`, `bin/`, `templates/` — the code that generates and runs `task.sh` itself)
+> unless the user has explicitly granted permission for that specific case.** You have no
+> standing to change that tool from inside this project, and no need to read its
+> implementation to use it correctly. If its behavior is unclear, surprising, or looks wrong,
+> **file it: `task.sh feedback "<cause>" "<parameter>" "<~3 sentences: what you wanted, what
+> happened>" --as <you>`** — it goes to claude-task-manager's own shared log for its
+> developer, not this project's board. Report it; don't go read or patch the source yourself.
+
 ## Trigger
 
 ```json
@@ -114,14 +134,14 @@ Most common commands (always call with the FULL absolute path — copy it as sho
 - `… priority <id> <low|normal|high|urgent>` — priority (drives `next` ordering; note `list` is NOT priority-sorted).
 - `… tag <id> <add|rm> <tag>` — tags (e.g. `frontend`/`backend`/`test`).
 - `… module <id> <area>` — functional-area label (`assignedModule`), e.g. `event-edit`/`billing`; free text, empty string clears it. A separate axis from the work-type `tag`; filter with `list --module <area>`.
-- `… assign <id> <agent>` — sets `assignedAgentId` (more convenient than `set` for claiming). Use the **stripped identity** from the roster below, NOT the `ctm-`/`tm-` launch name.
+- `… assign <id> <agent>` — sets `assignedAgentId` (more convenient than `set` for claiming). For the base roster the identity IS the launch name; for a `tm-*` agent use the **stripped identity** (without the `tm-` prefix), not the launch name.
 - `… claim <id>` — **atomic, race-safe** take: flips a `todo` to `in_progress` AND assigns it to the `--as` caller in one locked write; refuses if another agent already claimed it (prevents two agents double-working the same task). Teammates use this to pick up work.
 - `… handoff <id> <to> [note]` — reassign to `<to>` AND send them a **directed** inbox ping (`‼️`). The explicit way to route a finding/bug/sub-task to another teammate.
 - `… review <id> [reviewer=main] [note]` — move to `review` AND route it to a reviewer (assigns them + pings their inbox), so review has an owner instead of silting up. Teammates close their part with this instead of a bare `status … review`.
 - `… review-queue [reviewer]` — tasks in `review` (oldest first) with age; optionally just one reviewer's queue. Main's "what's waiting for my sign-off" view.
 - `… stale [--older-than 24h] [status...]` — held-but-idle tasks (default `in_progress`+`review`) past a threshold, by `lastActivityAt`. Surfaces stuck/forgotten work to re-route.
 - `… files <id> [add|rm <abs-path>...]` — the source files a task touches (absolute paths, unique; no sub-op lists them). A standard duty on every task — the machine-readable pointer to the change, kept out of the free-text note.
-- `… checklist <id> [add <text>...|done <item-id>...|undo <item-id>...|rm <item-id>...]` — the small steps INSIDE a task (no sub-op lists them). **You (main) write the items; teammates only tick them off** — see the workflow below. Items get a stable `c<n>` id, never reused. Use it for steps that don't deserve their own task — a real sub-task belongs in `dep`/`handoff` instead. Marking a task `done` with unchecked items warns but doesn't block; ticking the last item does NOT change the status by itself.
+- `… checklist <id> [add <text>...|done <item-id>...|undo <item-id>...|rm <item-id>...]` — the small steps INSIDE a task (no sub-op lists them). **You (main) write the items; teammates only tick them off** — see the workflow below. Items get a stable `c<n>` id, never reused. Use it for steps that don't deserve their own task — a real sub-task belongs in `dep`/`handoff` instead. Marking a task `done` with unchecked items warns but doesn't block; ticking the last item does NOT change the status by itself. **Phrase every item as a short SENTENCE, never a one/two-word label** — "add the `/discount` route to the checkout API", not "route". A teammate (especially a junior — see the roster section) has to act on the item without asking you what it meant.
 - `… dep <id> <add|rm> <other-id>` — dependency (`dependsOn`): `id` waits on `other-id`; includes cycle and existence checks.
 - `… deps <id>` — what this task is waiting on and what it blocks.
 - `… next [--claim]` — the next recommended `todo` task (no open dependency), sorted by priority. `--claim` atomically takes it (see `claim`).
@@ -154,42 +174,74 @@ At the start of every session, **read `__TASK_SH_PATH__ ctx` first**, and let it
 The **main agent does NOT do the implementation work itself.** Its job is to capture and
 break down requests into tasks, `add`/`assign` them, coordinate, review, and decide the
 handoff — it does **not** write the code/dev work directly. All actual implementation and
-follow-up work is **delegated to teammate subagents** — the project's `ctm-*` agents (and
+follow-up work is **delegated to teammate subagents** — the project's base roster agents (and
 `tm-*` agents where present). The main agent only: plans, adds/assigns tasks, reviews the
 result, and decides the `review → done | assign+todo` handoff.
 
 - When a request is actionable, `main` creates the task(s) and **assigns** them to the
-  appropriate `ctm-*` / `tm-*` teammate (`… assign <id> <agent> --as main`) instead of
-  starting to implement.
+  appropriate teammate (`… assign <id> <agent> --as main`) instead of starting to implement.
 - Each teammate claims its task, moves it to `in_progress`, does the work, and updates
   status with its own `--as <name>` (never `--as main`).
 - `main` stays the coordinator across the whole loop: fill teammate queues, keep tasks
   assigned, and on `review` decide `done` or reassign.
-- **Model choice on launch (token efficiency).** The `ctm-*` frontmatter `model:` is only a
-  **default** — the main overrides it **per launch** via the Agent `model` parameter, so
-  every teammate can be started with **either `haiku` or `sonnet`**, chosen by task weight:
-  - `haiku` — mechanical / small, well-scoped edits (rename, move, boilerplate, a single
-    localized change with a clear spec).
-  - `sonnet` — investigation, planning, multi-file or ambiguous changes, and any testing.
-  When unsure, prefer `sonnet`. **Never use `opus`, `fable`/`claude-fable-5`** — teammates
-  run only on `haiku` or `sonnet`.
+- **Assign before anything can happen.** A teammate can only claim a task that is **assigned
+  to it by name** — `task.sh` refuses a claim on a task belonging to somebody else *or to
+  nobody*. There is no tag-based self-service: an unassigned task sits still forever. Routing
+  is main's job, and only main's.
+- **Model choice is the LEVEL, not a launch flag.** Do NOT pass the Agent `model` parameter
+  when launching a teammate — pick the right *agent* instead and let its frontmatter decide.
+  The dev roster is tiered, and the tier IS the model: `junior` = `haiku`, `medior` = `sonnet`,
+  `senior` = `opus`. **Never use `fable`/`claude-fable-5`.**
 
 ### Teammate roster — the base set
 
 For the base agents the **launch name (`subagent_type`) and the task-manager identity
 (`assign` / `--as`) are the SAME string** — there is nothing to strip or translate:
 
-| Agent | Use it for |
-|---|---|
-| `backend-dev`       | backend work |
-| `frontend-dev`      | frontend work |
-| `investigator`      | read-only code investigation; usually first in the chain |
-| `playwright-tester` | verifying behavior in a real browser; usually last in the chain |
+| Agent | Model | Use it for |
+|---|---|---|
+| `ctm-be-junior` / `ctm-fe-junior` | haiku  | pre-broken-down, mechanical work — see the rule below |
+| `ctm-be-medior` / `ctm-fe-medior` | sonnet | **the default.** Features, refactors, real bugfixes |
+| `ctm-be-senior` / `ctm-fe-senior` | opus   | architecture, contracts, escalation — **needs permission** |
+| `ctm-investigator`      | sonnet | read-only code investigation; usually first in the chain |
+| `ctm-playwright-tester` | sonnet | verifying behavior in a real browser; usually last in the chain |
 
-**`playwright-tester` is environment-dependent:** it can only do its job where the Playwright
+**Pick the level by the weight of the task, and when unsure pick the medior.** It is the
+workhorse: unless a task is trivially mechanical or genuinely architectural, it belongs there.
+
+**The senior (`opus`) needs the user's explicit permission — ASK BEFORE LAUNCHING IT.** It is
+the most expensive agent in the roster, so it is not yours to start on your own judgement. If
+the user says no, or you can't ask, **the medior does the work** — never stall a task on a
+senior you weren't allowed to launch. If the medior then blocks on an architectural decision,
+bring that decision to the user yourself.
+
+**The junior only works from a breakdown.** It runs on the cheapest model and will bounce back
+anything it has to think about. Only assign it a task that already has a **checklist and named
+files** — which means *you* (or the senior) must break it down first. That breakdown costs
+something, so the junior only pays off on bulk, repetitive, decided work. **If you find
+yourself about to write a breakdown just to justify using the junior, give it to the medior.**
+
+**Area handoffs happen medior-to-medior** (`ctm-be-medior` ↔ `ctm-fe-medior`), never diagonally
+across levels.
+
+**`ctm-playwright-tester` is environment-dependent:** it can only do its job where the Playwright
 MCP server is available. If it isn't, don't launch it — do the verification yourself, or hand
 it to the human, and say which it was. Never let a task pass as "verified" because the agent
 that would have checked it couldn't run.
+
+### Who reviews the junior
+
+By default **the junior routes its work to you (`main`)**, and you close it. You may instead
+delegate that review to the medior — it saves your context on a run of many small junior tasks,
+at the cost of you seeing less. **That delegation needs the user's explicit permission.** With
+it:
+
+- Tell **both** agents in the task/instruction: the junior routes to `<be|fe>-medior`, and the
+  medior knows it may close that task as `done`.
+- Without a word from you, the junior defaults to `main` — forgetting to mention it is safe,
+  it just falls back.
+
+A teammate **never** closes its own task as `done`; that stays your call.
 
 The project may also ship `tm-*` variants — their identity is the name WITHOUT the `tm-`
 prefix (e.g. `tm-frontend` → `frontend`), so check the `--as` line inside each `tm-*` agent
@@ -200,10 +252,15 @@ picked up by the wrong teammate, that's the first thing to check.
 
 ### How many teammates to run
 
-**Run 3-4 teammates at a time — no more — and keep feeding them.** The right default is the
-base set: `investigator`, `backend-dev`, `frontend-dev`, plus `playwright-tester` where the
-environment allows it. This is a limit on CONCURRENCY, not on total work: a teammate that
-finishes its task stays alive and takes the next one.
+**Run 3-4 teammates at a time — no more — and keep feeding them.** The roster has eight
+definitions; that is a menu, NOT a launch list. The right default is `ctm-be-medior`, `ctm-fe-medior`,
+`ctm-investigator`, plus a fourth as the work demands (`ctm-playwright-tester` where the environment
+allows it, or one junior/senior — not both). This is a limit on CONCURRENCY, not on total work:
+a teammate that finishes its task stays alive and takes the next one.
+
+- **Never run two levels of the same area at once** unless the work genuinely splits that way
+  (e.g. the senior designs while the junior grinds a decided list). A `ctm-be-junior` and a
+  `ctm-be-medior` racing on the same feature is coordination cost with no throughput gain.
 
 - **Don't stop a teammate to start another.** Spawning is expensive and throws away everything
   it has learned about the codebase. Send it the next task instead.
@@ -213,7 +270,7 @@ finishes its task stays alive and takes the next one.
   (routing, review, merge conflicts on the same files) grows faster than the throughput, and
   two teammates editing the same file will undo each other's work.
 - **Fewer is fine.** If the work is one-dimensional, one teammate is the right number — don't
-  spawn a frontend-dev for a task with no frontend in it.
+  spawn an `ctm-fe-medior` for a task with no frontend in it.
 
 ## Required workflow
 
@@ -224,7 +281,7 @@ every non-meta command** (as the main agent); a teammate uses its own `--as <nam
 2. At session start, `__TASK_SH_PATH__ ctx --as main`; if missing, `ctx-init "<initPrompt>" "<goal>" --as main`.
 3. If the last user message is actionable and there's no active task for it, immediately `__TASK_SH_PATH__ add <id> "<title>" "<desc>" --as main`. On add, set **priority** only when it isn't ordinary — `… priority <id> high|urgent --as main` for blockers or user-flagged urgency (`normal` is the default; don't set it explicitly). This is what makes a teammate's `next` pick the right task first. Optionally label the **functional area** with `… module <id> <area> --as main` when filtering the board by area (`list --module <area>`) is useful — a separate axis from the `frontend`/`backend` work-type tags.
 4. **When the task breaks into steps, record them as a checklist ON the task — this is main's job, not the teammate's.** You are the one who planned the work; a teammate that has to invent the steps has already lost the plan. Write them at `add` time (or as soon as the breakdown is clear), and the teammate then just ticks them off as it goes, so progress is visible while the work is running rather than only in the closing note. Keep the boundary: a step that needs its own owner or status is a TASK (`add` + `handoff`), not a checklist item.
-   `__TASK_SH_PATH__ checklist <id> add "extend the save service" "add the route" "wire up the form" --as main`
+   `__TASK_SH_PATH__ checklist <id> add "extend the save service to accept the new field" "add the /discount route to the API" "wire the discount field into the checkout form" --as main`
 5. Before starting work, the task should be `todo`, or run `__TASK_SH_PATH__ status <id> in_progress --as main`.
 6. If the work cannot proceed, `__TASK_SH_PATH__ status <id> blocked "<reason>" --as main`.
 7. When done, `__TASK_SH_PATH__ status <id> done --as main`. With unchecked checklist items left, this warns on stderr but still goes through — either tick them, remove the ones that turned out unnecessary, or accept the warning knowingly.

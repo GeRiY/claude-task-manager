@@ -3,11 +3,13 @@
 # add-agent.sh — create a custom teammate agent definition in an ALREADY installed
 # (ctm init-ed) project.
 #
-# Naming convention: claude-task-manager's base set, installed by install.sh, is unprefixed
-# (frontend-dev / backend-dev / investigator / playwright-tester — the launch name IS the
-# task-manager identity) — generated/refreshed by "ctm init". Custom agents created with THIS
-# script, as needed by the user, are always named "tm-*" — so at a glance you can tell what's the auto-refreshed
-# base set apart from a custom, hand-edited addition ("ctm init" never touches these).
+# Naming convention: claude-task-manager's base roster, installed by install.sh, is always
+# named "ctm-*" (the be-/fe- x junior/medior/senior dev tiers + ctm-investigator /
+# ctm-playwright-tester — the launch name IS the task-manager identity, nothing is stripped)
+# — generated/refreshed by "ctm init". Custom agents created with THIS script, as needed by
+# the user, are always named "tm-*" instead — two disjoint namespaces, so at a glance (and by
+# construction) you can tell the auto-refreshed base roster apart from a custom, hand-edited
+# addition ("ctm init" never touches "tm-*" files).
 #
 # Usage (typically invoked via the "ctm agent add" subcommand):
 #   /Users/mgeri1993/code/projects/claude-task-manager/bin/add-agent.sh [target-dir] <name> [description]
@@ -29,8 +31,14 @@ die() { echo "error: $*" >&2; exit 1; }
 source "$ROOT_DIR/engine/check-update.sh"
 check_for_updates "$ROOT_DIR"
 
+# shellcheck source=engine/roster.sh
+source "$ROOT_DIR/engine/roster.sh"
+
 # shellcheck source=engine/agent-tools.sh
 source "$ROOT_DIR/engine/agent-tools.sh"
+
+# shellcheck source=engine/agent-block.sh
+source "$ROOT_DIR/engine/agent-block.sh"
 
 TARGET_ARG="${1:-}"
 if [[ -n "$TARGET_ARG" && -d "$TARGET_ARG" ]]; then
@@ -51,12 +59,18 @@ SKILL_DIR="$TARGET_DIR/.claude/skills/task-manager"
 TASK_SH="$SKILL_DIR/task.sh"
 [[ -x "$TASK_SH" ]] || die "this project is not installed — run first: ctm init (here: $TARGET_DIR)"
 
-# Normalize the name: always with a "tm-" prefix. The base set's names are reserved: a custom
-# agent's task-manager IDENTITY is the stripped SHORT (its `--as` value), so `add-agent
-# backend-dev` would install `tm-backend-dev` but claim tasks AS `backend-dev` — the same
-# identity as the base agent, and the two would fight over the same queue. The tm- prefix on
-# the launch name does NOT protect against that; only this check does.
-BASE_AGENTS="backend-dev frontend-dev investigator playwright-tester"
+# Normalize the name: always with a "tm-" prefix. A custom agent's task-manager IDENTITY is the
+# stripped SHORT (its `--as` value) — since every base-roster name already lives in the disjoint
+# "ctm-" namespace, the blanket "ctm-*"-is-reserved rule below is what actually prevents a
+# collision (e.g. `add-agent ctm-be-medior` or `add-agent tm-ctm-be-medior` would both otherwise
+# produce a custom agent claiming tasks AS `ctm-be-medior` — the same identity as the real base
+# agent, fighting it over the same queue).
+#
+# The per-name loop below is a second, narrower safety net for the (currently theoretical) case
+# of a roster name that does NOT start with "ctm-" — it comes from roster.sh, so adding a tier
+# to templates/agents-manifest.json reserves its name here automatically; a hardcoded copy would
+# silently rot the moment the roster changes.
+BASE_AGENTS="$(roster_agent_names | paste -sd ' ' -)"
 SHORT="${RAW_NAME#tm-}"
 [[ "$SHORT" == ctm-* || "$SHORT" == ctm ]] && die 'the "ctm-" prefix is reserved — choose a different name'
 for reserved in $BASE_AGENTS; do
@@ -77,6 +91,7 @@ OUT="$AGENTS_DIR/$AGENT_NAME.md"
 [[ -e "$OUT" ]] && die "already exists: $OUT (delete it by hand if you want to regenerate it)"
 
 AGENT_TOOLS="$(resolve_agent_tools "$AGENT_NAME" "$TARGET_DIR")"
+BLOCK_FILE="$(agent_block_tempfile "$AGENT_NAME" "$TARGET_DIR")"
 sed \
   -e "s#__AGENT_NAME__#$AGENT_NAME#g" \
   -e "s#__AGENT_SHORT__#$SHORT#g" \
@@ -84,7 +99,9 @@ sed \
   -e "s#__PROJECT_LABEL__#$LABEL#g" \
   -e "s#__TASK_SH_PATH__#$TASK_SH#g" \
   -e "s#__AGENT_TOOLS__#$AGENT_TOOLS#g" \
-  "$ROOT_DIR/templates/tm-custom.md.tmpl" > "$OUT"
+  -e "s#__PROJECT_CLAUDE_DIR__#$TARGET_DIR/.claude#g" \
+  "$ROOT_DIR/templates/tm-custom.md.tmpl" | sed -e "/^__AGENT_BLOCK__\$/r $BLOCK_FILE" -e "/^__AGENT_BLOCK__\$/d" > "$OUT"
+rm -f "$BLOCK_FILE"
 
 echo "created: $OUT"
 echo "(--as/assign value: \"$SHORT\" — edit the file if you need to refine its role/scope)"

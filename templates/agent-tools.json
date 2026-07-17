@@ -1,18 +1,18 @@
 {
   "//": "Tool allow-list baked into each teammate agent's frontmatter at `ctm init` time.",
-  "//default": "Used for any agent name not listed under \"agents\" (incl. most custom tm-* agents).",
-  "//agents": "Per-agent override, keyed by the generated agent name (the base set, or tm-<name> custom).",
+  "//default": "Used for any agent name not listed under \"agents\" — this covers the whole tiered dev set (be-/fe- x junior/medior/senior) and most custom tm-* agents.",
+  "//agents": "Per-agent override, keyed by the generated agent name. Only list an agent here if it genuinely needs a DIFFERENT toolset: a repo-level entry is a heavier thing for a project to reason about than the plain default.",
+  "//tiers": "The dev tiers deliberately share one toolset, so they are NOT listed below. Tools cannot separate seniority anyway — task.sh runs through Bash, so every teammate needs Bash/Read whatever its level. What separates the tiers is the MODEL (templates/agents-manifest.json) and the scope in templates/agent-tiers/*.md.",
   "//format": "Each value is either a comma-separated string or a JSON array of tool names.",
-  "//override": "A project may override this per-agent by placing its own .claude/agent-tools.json in the target repo (see engine/agent-tools.sh for the precedence).",
+  "//override": "A project overrides this with its own .claude/agent-tools.json — per agent (.agents[name]) or for every agent at once (.default). The PROJECT config wins over this file entirely; see engine/agent-tools.sh for the precedence. Manage it with: ctm agent tools set|add|rm|unset.",
+  "//mandatory": "A small core (MANDATORY_TOOLS in engine/agent-tools.sh) is always unioned in and cannot be configured away — without it an agent could not run task.sh at all.",
 
   "default": "Read, Write, Edit, Bash, Glob, Grep, SendMessage, mcp__ide__getDiagnostics",
 
-  "//playwright": "playwright-tester needs the Playwright MCP server; without it the agent is installed but can't drive a browser — see the roster note in SKILL.md.",
+  "//playwright": "ctm-playwright-tester needs the Playwright MCP server; without it the agent is installed but can't drive a browser — see the roster note in SKILL.md.",
 
   "agents": {
-    "backend-dev": "Read, Write, Edit, Bash, Glob, Grep, SendMessage, mcp__ide__getDiagnostics",
-    "frontend-dev": "Read, Write, Edit, Bash, Glob, Grep, SendMessage, mcp__ide__getDiagnostics",
-    "investigator": "Read, Grep, Glob, Bash, SendMessage",
-    "playwright-tester": "Read, Grep, Glob, Bash, SendMessage, mcp__playwright__browser_navigate, mcp__playwright__browser_snapshot, mcp__playwright__browser_click, mcp__playwright__browser_type, mcp__playwright__browser_fill_form, mcp__playwright__browser_select_option, mcp__playwright__browser_press_key, mcp__playwright__browser_hover, mcp__playwright__browser_wait_for, mcp__playwright__browser_take_screenshot, mcp__playwright__browser_console_messages, mcp__playwright__browser_network_requests, mcp__playwright__browser_evaluate, mcp__playwright__browser_tabs, mcp__playwright__browser_resize, mcp__playwright__browser_close"
+    "ctm-investigator": "Read, Grep, Glob, Bash, SendMessage",
+    "ctm-playwright-tester": "Read, Grep, Glob, Bash, SendMessage, mcp__playwright__browser_navigate, mcp__playwright__browser_snapshot, mcp__playwright__browser_click, mcp__playwright__browser_type, mcp__playwright__browser_fill_form, mcp__playwright__browser_select_option, mcp__playwright__browser_press_key, mcp__playwright__browser_hover, mcp__playwright__browser_wait_for, mcp__playwright__browser_take_screenshot, mcp__playwright__browser_console_messages, mcp__playwright__browser_network_requests, mcp__playwright__browser_evaluate, mcp__playwright__browser_tabs, mcp__playwright__browser_resize, mcp__playwright__browser_close"
   }
 }

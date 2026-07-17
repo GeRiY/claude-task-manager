@@ -21,6 +21,9 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# shellcheck source=engine/feedback.sh
+source "$SCRIPT_DIR/feedback.sh"
+
 # Project root: two levels up from the skill directory (.claude/skills/task-manager -> project).
 # Uses git if available, otherwise falls back to the relative path.
 default_dir() {
@@ -244,6 +247,9 @@ cmd_help() {
   cat <<'EOF'
 task.sh — token-efficient tasks.json manager
 
+New here? `task.sh guide` walks through end-to-end scenarios ("when X happens, run Y") —
+read that first. This is the dry flag-by-flag reference.
+
 STORAGE
   Default: <project>/.claude/task-manager/tasks.json  (override: TM_DIR env)
 
@@ -251,7 +257,7 @@ CALLER IDENTITY (--as) — REQUIRED for every non-meta command
   Add to every call: --as <agent-name>   (your name; the main agent: main).
   This is how the PostToolUse hook knows who to inject fresh events (inbox) for, and it's
   written as every event's `by`. Meta commands are exempt (no --as needed):
-  help, inbox, init, validate, restore, raw.
+  help, inbox, init, validate, restore, raw, lang.
   Example:  task.sh status fix-login done --as backend-auth
 
 NOTIFICATION (inbox — the hook calls this automatically, but you can too)
@@ -259,18 +265,24 @@ NOTIFICATION (inbox — the hook calls this automatically, but you can too)
                            (not its own), then advances the cursor.
                            SILENT if there's nothing new. The hook appends this as
                            additionalContext.
+  lang                     The project's preferred language (set from the board's UI
+                           language). REQUIRED once per session — agent templates instruct
+                           every agent to call this at session start, if not already done.
 
 QUERIES (non-mutating, terse output)
   list [status] [filters]  Terse list: "<id> [status] (prio) @module title #tag".
                            Filters: --tag <t> --agent <a> --priority <p> --module <m>
                                     --all (include archived)  --json (machine output)
-  ids [status]             Just the ids, one per line
+  ids [status] [--all]     Just the ids, one per line (archived excluded unless --all)
   get <id>                 ONE task's full JSON (not the whole file)
   field <id> <field>       The raw value of one field of one task
-  summary                  Count by status + total
-  find <text>              Title/description search (case-insensitive), terse list
-  next [--claim]           Next recommended todo (no open dependency), by priority.
-                           --claim atomically takes the top ready todo (-> in_progress, you)
+  summary [--all]          Count by status + total (archived excluded unless --all)
+  find <text> [--all]      Title/description search, case-insensitive, terse list
+                           (archived excluded unless --all)
+  next [--claim]           Your next recommended todo (no open dependency), by priority.
+                           Always scoped to the --as caller: only tasks assigned to YOU.
+                           For an unscoped overview use `list todo` instead.
+                           --claim atomically takes your top ready todo (-> in_progress)
   review-queue [reviewer]  Tasks in review (oldest first) with age; optionally one reviewer's
   stale [--older-than 24h] [status...]
                            Held-but-idle tasks (default in_progress+review) past the threshold
@@ -304,14 +316,19 @@ MUTATIONS (atomic write under mkdir-lock; timestamp + history auto-maintained; p
                            their own task (no owner, status, or board card). For a real,
                            independent unit of work, use `add`+`dep`/`handoff` instead. No
                            sub-op: list them. Stable ids (c1, c2, ...), never reused.
+                           Phrase each item as a short SENTENCE, not a one/two-word label:
+                           "patch the null check in Login.php", not "patch" — a bare label
+                           tells the next reader nothing they can act on.
   files <id> [add|rm <abs-path>...]
                            Record the source files a task touches (absolute paths, unique).
                            No sub-op: list them. This is a standard duty when working a task.
   module <id> <module>     Set the module/area label (assignedModule) — free text,
                            empty string clears it. Use `list --module <m>` to filter.
   assign <id> <agent>      Set assignedAgentId (more convenient than `set` for claiming)
-  claim <id> [agent]       Atomically take a 'todo' -> in_progress + assign to you (the --as
+  claim <id> [agent]       Atomically move a 'todo' ASSIGNED TO YOU -> in_progress (the --as
                            caller). Fails if already claimed — race-safe, no double-work.
+                           Only the assignee may claim: a task assigned to somebody else, or
+                           to nobody, is refused. Route work with `assign`/`handoff` first.
   handoff <id> <to> [note] Reassign to <to> and send them a directed inbox ping (‼️). The
                            explicit way to route a finding/bug to another agent.
   review <id> [reviewer=main] [note]
@@ -337,6 +354,17 @@ CONTEXT (session continuity — write context.json ONLY through these commands t
   ctx-question <add|rm> <text>
                            Add / resolve an open question in the openQuestions array
 
+FEEDBACK (about the TOOL itself, not this project's board)
+  feedback <cause> <parameter> <explanation>
+                           Reports a bug/observation about task.sh/claude-task-manager to a
+                           GLOBAL log shared across every installed project (NOT tasks.json),
+                           so the tool's developer can act on it. One line per entry:
+                           [timestamp] [project/agent] - cause, parameter, explanation.
+                           <explanation> should be ~3 sentences: what you wanted, what happened.
+                           e.g. task.sh feedback "claim" "claim fix-login --as backend" \\
+                                "Wanted to pick up an unassigned task. claim refused it with an
+                                unclear error. Had to read the source to understand why." --as backend
+
 STATUSES:    todo, in_progress, blocked, review, done
 PRIORITIES:  low, normal, high, urgent
 
@@ -347,11 +375,12 @@ EXAMPLES (--as is required for every non-meta command)
   task.sh module fix-login auth --as main
   task.sh list --module auth --as main
   task.sh dep deploy add fix-login --as main   # deploy waits on fix-login
-  task.sh next --as main                       # what should I do next?
-  task.sh next --claim --as backend            # take the top ready todo, race-safe
-  task.sh claim fix-login --as backend         # take a specific todo -> in_progress
-  task.sh handoff fix-login backend "404 on the export route, no entryPass" --as playwright-test
-  task.sh review fix-login main "done, please review" --as backend
+  task.sh list todo --as main                  # every open todo (main's overview)
+  task.sh assign fix-login ctm-be-medior --as main   # route it — a teammate cannot take it otherwise
+  task.sh next --claim --as ctm-be-medior            # take your top ready todo, race-safe
+  task.sh claim fix-login --as ctm-be-medior         # take a specific todo of YOURS -> in_progress
+  task.sh handoff fix-login ctm-be-medior "404 on the export route, no entryPass" --as ctm-playwright-tester
+  task.sh review fix-login main "done, please review" --as ctm-be-medior
   task.sh review-queue main --as main          # what's waiting for my sign-off
   task.sh stale --older-than 24h --as main     # stuck in_progress/review tasks
   task.sh status fix-login in_progress "started" --as backend-auth
@@ -360,6 +389,94 @@ EXAMPLES (--as is required for every non-meta command)
   task.sh validate                              # (meta: no --as)
   task.sh ctx-init "Port the legacy event editor" "Full port" --as main
   task.sh ctx-constraint "Legacy: read-only, never click buttons" --as main
+EOF
+}
+
+cmd_guide() {
+  cat <<'EOF'
+task.sh guide — STORIES: how to actually use this tool end-to-end
+This is NOT a flag reference (that's `task.sh help`). It's "when X happens, run Y" —
+the real sequences that make the tool work as intended, not just the individual commands.
+Read this once per session, before your first task.sh call.
+
+────────────────────────────────────────────────────────────────────────
+EVERY AGENT — starting a session (once, first thing)
+  task.sh lang                                    # (meta) the project's preferred language
+  task.sh ctx --as <me>                           # standing goal / decisions / constraints
+  (empty?) task.sh ctx-init "<what kicked this off>" "<goal>" --as <me>
+
+MAIN — a new request comes in
+  task.sh add fix-login "Login fix" "Login returns 500" --as main
+  task.sh priority fix-login high --as main                # only if not "normal"
+  task.sh module fix-login auth --as main                  # optional, for board filtering
+  task.sh checklist fix-login add "reproduce the 500 on POST /login" "patch the null check in Login.php" "add a regression test for the null case" --as main
+    # ^ each item a short SENTENCE, not a one/two-word label — "patch" tells nobody anything,
+    #   "patch the null check in Login.php" is something a teammate can act on without guessing.
+    # (only if already broken down at add time)
+  task.sh assign fix-login <teammate> --as main             # REQUIRED — see below
+
+WHY "assign" IS NOT OPTIONAL
+  `claim` only ever succeeds for the agent a task is ALREADY assigned to — a task assigned to
+  nobody, or to somebody else, is refused outright. There is no tag-based self-service: adding
+  a `backend` tag does NOT make a task claimable by a backend agent. If a teammate reports "no
+  claimable todo", the fix is `assign`, not a different tag.
+
+TEAMMATE — starting your turn
+  task.sh next --claim --as <me>                  # take YOUR top ready todo, race-safe
+  task.sh deps fix-login --as <me>                # anything blocking it?
+  task.sh checklist fix-login --as <me>            # steps already broken down for you
+  ... do the work, ticking off checklist items as you finish each one ...
+  task.sh files fix-login add /abs/path/Login.php --as <me>
+  task.sh note fix-login "IMPL: fixed null check at Login.php:42" --as <me>
+  task.sh review fix-login main "ready for review" --as <me>   # NEVER `status done` yourself
+
+MAIN — closing the loop
+  task.sh review-queue main --as main             # what's waiting on my sign-off?
+  task.sh get fix-login --as main                 # the full task + its notes, before deciding
+  task.sh status fix-login done --as main         # OR assign+status todo if more work remains
+
+MID-TASK — you found something that isn't yours to fix
+  task.sh add export-500 "Export 500s too" "same root cause, different route" --as <me>
+  task.sh handoff export-500 <other-teammate> "same root cause, different route" --as <me>
+  task.sh dep fix-login add export-500 --as <me>   # only if fix-login should wait on it
+
+YOUR QUEUE IS EMPTY
+  There's no "I'm idle" task.sh command for this — SendMessage main directly and say so.
+  Don't just go quiet; an idle teammate is wasted concurrency main can't see from tasks.json.
+
+A TASK LOOKS STUCK
+  task.sh stale --older-than 24h --as main        # in_progress/review sitting too long
+  task.sh history fix-login --as main             # what actually happened to it
+
+MAIN — customizing a teammate's tools or instructions for THIS project
+  These are `ctm` commands (the global CLI), NOT `task.sh` — they edit the generated agent
+  DEFINITIONS in .claude/agents/, not the task board:
+  ctm agent tools show ctm-be-medior                        # what tools does it have right now?
+  ctm agent tools set  ctm-be-medior "Read, Edit, Bash, Grep, mcp__ide__getDiagnostics"
+  ctm agent tools add  ctm-be-medior mcp__playwright__browser_navigate   # extend, don't replace
+  ctm agent tools rm   ctm-be-medior Grep                   # trim (the mandatory core is protected)
+  ctm agent tools unset ctm-be-medior                       # drop back to the built-in default
+  ctm agent block set  ctm-be-junior ./project-conventions.md   # append project-specific rules
+  ctm agent block show                                      # what's actually baked into everyone
+  These only edit the PROJECT's override config — re-run `ctm init` (`--force` to overwrite
+  without prompting) afterward so the change actually reaches the generated
+  .claude/agents/*.md files.
+
+REPORTING A BUG OR ODD BEHAVIOR IN THE TOOL ITSELF (not this project's board)
+  task.sh feedback "<cause — command or situation>" "<parameter(s) you called it with>" \
+    "<~3 sentences: what you wanted, what happened>" --as <me>
+  Goes to claude-task-manager's own shared log, not this project's tasks.json, so the tool's
+  developer can act on it. This is the prescribed alternative to reading the tool's own
+  source (see the HARD RULE at the top of SKILL.md) — report it, don't go read or patch the
+  implementation yourself.
+
+SESSION CONTINUITY — leave a trail for your future self and every other agent
+  task.sh ctx-decision "auth" "switched to JWT" "session cookies broke on mobile" --as main
+  task.sh ctx-constraint "no schema migrations without senior sign-off" --as main
+  task.sh ctx-question add "should export also paginate?" --as main
+  task.sh ctx-question rm  "should export also paginate?" --as main   # once it's answered
+
+Full flag-by-flag reference: task.sh help
 EOF
 }
 
@@ -407,11 +524,19 @@ cmd_list() {
 
 cmd_ids() {
   require_tasks_file
-  if [[ $# -ge 1 ]]; then
-    jq -r --arg s "$1" '.tasks[]|select(.status==$s)|.id' "$TASKS_FILE"
-  else
-    jq -r '.tasks[].id' "$TASKS_FILE"
-  fi
+  local status="" show_all=0
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --all|--include-archived) show_all=1; shift ;;
+      --*) die "unknown flag: $1" ;;
+      *)   status="$1"; shift ;;
+    esac
+  done
+  jq -r --arg s "$status" --argjson all "$show_all" '
+    .tasks[]
+    | select(($all==1) or ((.isArchived // false)|not))
+    | select($s=="" or (.status==$s))
+    | .id' "$TASKS_FILE"
 }
 
 cmd_get() {
@@ -432,19 +557,36 @@ cmd_field() {
 
 cmd_summary() {
   require_tasks_file
-  jq -r '
-    (.tasks|group_by(.status)|map("\(.[0].status)\t\(length)")|.[]),
+  local show_all=0
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --all|--include-archived) show_all=1; shift ;;
+      --*) die "unknown flag: $1" ;;
+      *)   die "unknown argument: $1" ;;
+    esac
+  done
+  jq -r --argjson all "$show_all" '
+    [ .tasks[] | select(($all==1) or ((.isArchived // false)|not)) ] as $t
+    | ($t|group_by(.status)|map("\(.[0].status)\t\(length)")|.[]),
     "─\t─",
-    "total\t\(.tasks|length)"
+    "total\t\($t|length)"
   ' "$TASKS_FILE" | column -t -s $'\t'
 }
 
 cmd_find() {
   require_tasks_file
-  [[ $# -ge 1 ]] || die "usage: find <text>"
-  local q="$1"
-  jq -r --arg q "$q" '
+  local q="" show_all=0
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --all|--include-archived) show_all=1; shift ;;
+      --*) die "unknown flag: $1" ;;
+      *)   q="$1"; shift ;;
+    esac
+  done
+  [[ -n "$q" ]] || die "usage: find <text> [--all]"
+  jq -r --arg q "$q" --argjson all "$show_all" '
     .tasks[]
+    | select(($all==1) or ((.isArchived // false)|not))
     | select((.title|ascii_downcase|contains($q|ascii_downcase))
              or ((.description//"")|ascii_downcase|contains($q|ascii_downcase)))
     | "\(.id)\t[\(.status)]\t\(.title)"
@@ -848,10 +990,16 @@ cmd_deps() {
   ' "$TASKS_FILE"
 }
 
+# _ready_todo_ids [agent]
 # Ordered ids of ready todos (dependency-satisfied), highest priority first. Shared by
 # `next` (display) and `next --claim` (atomic pick-and-claim).
+#
+# With <agent>, only that agent's OWN todos — matching what claim will actually allow. In
+# practice cmd_next always passes one, since `next` is not in actor_optional() and so requires
+# --as; the empty case only keeps this helper total for any other caller.
 _ready_todo_ids() {
-  jq -r '
+  local agent="${1:-}"
+  jq -r --arg agent "$agent" '
     . as $root
     | def doneish($i): ($root.tasks[]|select(.id==$i)) as $d
         | ($d==null) or ($d.status=="done") or ($d.isArchived==true);
@@ -859,6 +1007,7 @@ _ready_todo_ids() {
       [ $root.tasks[]
         | select((.isArchived//false)|not)
         | select(.status=="todo")
+        | select( $agent == "" or (.assignedAgentId // "") == $agent )
         | select( ((.dependsOn//[]) | map(doneish(.)) | all) ) ]
       | sort_by(prio_rank, .createdAt)
       | .[].id
@@ -888,17 +1037,19 @@ cmd_next() {
         jq -r --arg id "$id" '.tasks[]|select(.id==$id)|"  \(.title)"' "$TASKS_FILE"
         return 0
       fi
-    done < <(_ready_todo_ids)
-    echo "no claimable todo (all taken, blocked, done, or none exist)"
+    done < <(_ready_todo_ids "$ACTOR")
+    echo "no claimable todo assigned to $ACTOR (none assigned, all taken, blocked, or done)"
     return 0
   fi
   local list
-  list="$(_ready_todo_ids)"
+  list="$(_ready_todo_ids "$ACTOR")"
   if [[ -z "$list" ]]; then
-    echo "no available todo (all blocked, done, or none exist)"
+    echo "no available todo assigned to $ACTOR (none assigned, all blocked, or done)"
     return 0
   fi
-  jq -r '
+  # Same scoping as _ready_todo_ids above: what is listed must be exactly what the caller
+  # could actually claim, or `next` would advertise other agents' work.
+  jq -r --arg agent "$ACTOR" '
     . as $root
     | def doneish($i): ($root.tasks[]|select(.id==$i)) as $d
         | ($d==null) or ($d.status=="done") or ($d.isArchived==true);
@@ -906,6 +1057,7 @@ cmd_next() {
       [ $root.tasks[]
         | select((.isArchived//false)|not)
         | select(.status=="todo")
+        | select( $agent == "" or (.assignedAgentId // "") == $agent )
         | select( ((.dependsOn//[]) | map(doneish(.)) | all) ) ]
       | sort_by(prio_rank, .createdAt)
       | .[] | "\(.id)\t[\(.priority//"normal")]\t\(.title)"
@@ -913,9 +1065,15 @@ cmd_next() {
 }
 
 # --- Coordination: atomic claim / directed handoff / review routing --------------
-# The atomicity guarantee lives INSIDE the jq filter (`if .status=="todo"`), executed under the
-# mkdir-lock in apply_jq: two agents racing to claim the same todo are serialized, and only the
-# first flips it to in_progress. The loser's guard sees a non-todo status and writes nothing.
+# The atomicity guarantee lives INSIDE the jq filter, executed under the mkdir-lock in
+# apply_jq: two agents racing to claim the same todo are serialized, and only the first flips
+# it to in_progress. The loser's guard sees a non-todo status and writes nothing.
+#
+# The guard also enforces OWNERSHIP: only the assignee may claim. A task assigned to somebody
+# else — or to nobody — is refused, rather than being taken over and reassigned to the caller
+# (which is what claim used to do). With a tiered roster this is what keeps the levels apart:
+# without it a junior polling for work would happily take a task meant for the senior, since
+# nothing but prose stopped it. Routing is now exclusively main's job, via assign/handoff.
 # Returns 0 if the caller now owns the task in_progress, 1 otherwise (no output — callers report).
 _try_claim() {
   local id="$1" agent="$2" now; now="$(now_iso)"
@@ -925,7 +1083,7 @@ _try_claim() {
   apply_jq --arg id "$id" --arg a "$agent" --arg now "$now" --arg actor "$ACTOR" '
     .updatedAt=$now
     | (.tasks[]|select(.id==$id)) |= (
-        if .status=="todo" then
+        if .status=="todo" and (.assignedAgentId // "") == $a then
           .history += [{at:$now, type:"status_changed", note:("claimed by "+$a), fromStatus:.status, toStatus:"in_progress", by:'"$JQ_BY"', files:'"$JQ_TRANSITION_FILES"'}]
           | .status="in_progress" | .assignedAgentId=$a | .updatedAt=$now | .lastActivityAt=$now
         else . end)'
@@ -949,9 +1107,15 @@ cmd_claim() {
     echo "claimed: $id -> $agent [in_progress]"
   else
     local owner st
-    owner="$(jq -r --arg id "$id" '.tasks[]|select(.id==$id)|.assignedAgentId' "$TASKS_FILE")"
+    owner="$(jq -r --arg id "$id" '.tasks[]|select(.id==$id)|.assignedAgentId // ""' "$TASKS_FILE")"
     st="$(jq -r --arg id "$id" '.tasks[]|select(.id==$id)|.status' "$TASKS_FILE")"
-    die "cannot claim $id: it is [$st], owned by ${owner:-?} (only 'todo' tasks are claimable)"
+    if [[ "$st" != "todo" ]]; then
+      die "cannot claim $id: it is [$st], not 'todo' (owner: ${owner:-nobody})"
+    elif [[ -z "$owner" ]]; then
+      die "cannot claim $id: it is not assigned to anyone. Only the assignee may claim — ask main to assign it (task.sh assign $id $agent --as main)"
+    else
+      die "cannot claim $id: it is assigned to \"$owner\", not to \"$agent\". Only the assignee may claim — leave it alone, or ask main to reassign it"
+    fi
   fi
 }
 
@@ -1272,26 +1436,39 @@ cmd_ctx_question() {
 # the right inbox, and emit_event records it as `by`).
 actor_optional() {
   case "$1" in
-    help|-h|--help|inbox|init|validate|check|restore|raw) return 0 ;;
+    help|-h|--help|guide|inbox|init|validate|check|restore|raw|lang) return 0 ;;
     *) return 1 ;;
   esac
 }
 
-# Prints a reminder (stderr) of the project's preferred language, set from the board's
-# current UI language (api/index.php writes it to $TM_DIR/.board-lang on every write — see
-# ApiClient.js). Deliberately NOT stored in any task/note: this is board-level state, read
-# fresh on every task.sh invocation, so whichever agent runs the command next sees it.
-# Skipped for help/inbox to avoid noise on the hook's own (very frequent) inbox lookups.
-print_lang_hint() {
-  case "$1" in
-    help|-h|--help|inbox) return 0 ;;
-  esac
-  local f="$TM_DIR/.board-lang" lang
-  [[ -f "$f" ]] || return 0
-  lang="$(tr -d '[:space:]' < "$f" 2>/dev/null)"
+# Reports the project's preferred language, set from the board's current UI language
+# (api/index.php writes it to $TM_DIR/.board-lang on every write — see ApiClient.js).
+# Deliberately NOT stored in any task/note: this is board-level state, read fresh on every
+# call. Meta command (no --as needed) — agent templates (templates/agents/*.md.tmpl)
+# REQUIRE every agent to call this once per session instead of being passively nagged on
+# every task.sh invocation.
+cmd_lang() {
+  local f="$TM_DIR/.board-lang" lang=""
+  [[ -f "$f" ]] && lang="$(tr -d '[:space:]' < "$f" 2>/dev/null)"
   case "$lang" in
-    hu) echo "[task-manager] Preferred language for this project: Hungarian — please reply and do the work in Hungarian." >&2 ;;
+    hu) echo "hu — this project's preferred language is Hungarian: reply and work in Hungarian for the rest of this session." ;;
+    en) echo "en — this project's preferred language is English." ;;
+    *)  echo "(unset) — no project-level language preference; use your default." ;;
   esac
+}
+
+# cmd_feedback — reports a bug/observation about the TOOL ITSELF (task.sh/claude-task-manager),
+# not this project's task board. Written to a GLOBAL log shared across every project this tool
+# is installed into (engine/feedback.sh), so --as identifies who filed it and the project is
+# recorded automatically from TM_DIR — deliberately NOT a meta command: knowing the source
+# project and agent is exactly what makes the log useful to the tool's developer.
+cmd_feedback() {
+  [[ $# -ge 3 ]] || die 'usage: feedback "<cause — command/situation>" "<parameter(s) you called it with>" "<~3 sentences: what you wanted, what happened>" --as <agent>'
+  local cause="$1" param="$2" body="$3"
+  local project; project="$(basename "$TM_DIR")"
+  log_feedback "$cause" "$param" "$body" "$ACTOR" "$project" \
+    || die "could not write feedback (lock contention?) — try again"
+  echo "logged: $FEEDBACK_FILE"
 }
 
 # --- Update notice (silent, cached, non-blocking) --------------------------------
@@ -1359,7 +1536,6 @@ maybe_notify_update() {
 main() {
   local cmd="${1:-help}"
   shift || true
-  print_lang_hint "$cmd"
   maybe_notify_update "$cmd"
 
   # Extract --as <agent> from ANYWHERE in the arguments; the rest goes into array A.
@@ -1384,6 +1560,8 @@ main() {
 
   case "$cmd" in
     help|-h|--help) cmd_help ;;
+    guide)     cmd_guide ;;
+    feedback)  cmd_feedback "$@" ;;
     inbox)     cmd_inbox "$@" ;;
     init)      cmd_init "$@" ;;
     list|ls)   cmd_list "$@" ;;
@@ -1402,6 +1580,7 @@ main() {
     stale)     cmd_stale "$@" ;;
     deps)      cmd_deps "$@" ;;
     validate|check) cmd_validate "$@" ;;
+    lang)      cmd_lang "$@" ;;
     add)       cmd_add "$@" ;;
     status)    cmd_status "$@" ;;
     status-many|status-multi) cmd_status_many "$@" ;;

@@ -4,7 +4,7 @@ description: "Task-manager teammate (__PROJECT_LABEL__ project): __AGENT_DESCRIP
 tools: __AGENT_TOOLS__
 model: sonnet
 color: gray
-memory: project
+memory: __PROJECT_CLAUDE_DIR__
 ---
 
 <!-- Custom agent — created by "ctm agent add". Unlike the claude-task-manager base
@@ -24,10 +24,13 @@ This document records the task-manager workflow: when and how to run `task.sh`. 
 - **NEVER** append `cd`, `&&`/`||`, redirects, or variable substitution — these trigger a permission prompt.
 - **Every non-meta command needs `--as __AGENT_SHORT__`** (your name). Without it, the script fails.
 - Write `tasks.json` **ONLY** through `task.sh` — never with Read/Edit/Write.
+- **Language (REQUIRED, once per session):** if you haven't checked yet this session, run `__TASK_SH_PATH__ lang` (no `--as` needed) and reply/work in whatever language it reports for the rest of the session.
 
 ## Which tasks are yours
 
-- Ones where `assignedAgentId == "__AGENT_SHORT__"`, OR that have a tag matching your role, OR that main assigned to you.
+**Only the ones assigned to you** — where `assignedAgentId == "__AGENT_SHORT__"`. This is enforced by `task.sh`, not just convention: `claim` refuses a task that is assigned to somebody else **or to nobody**, and `next` only ever shows you your own queue. A tag matching your role does NOT make a task yours — routing is main's job.
+
+- If you think a task should be yours but isn't assigned, ask main (`SendMessage`) — don't try to claim it.
 
 ## The work cycle (claim → work → report)
 
@@ -36,7 +39,7 @@ This document records the task-manager workflow: when and how to run `task.sh`. 
    `__TASK_SH_PATH__ next --as __AGENT_SHORT__`
 2. **Don't start a blocked task.** If `dependsOn` isn't `done`, leave it:
    `__TASK_SH_PATH__ deps <id> --as __AGENT_SHORT__`
-3. **Claim (atomic, race-safe):** one call flips a `todo` to `in_progress` AND assigns it to you; it refuses if another agent already claimed it:
+3. **Claim (atomic, race-safe):** flips your `todo` to `in_progress`; it refuses if the task isn't assigned to you, or if somebody already moved it:
    `__TASK_SH_PATH__ claim <id> --as __AGENT_SHORT__`
 4. **Work** according to the task description and your role above, within your scope.
    The task may carry a **checklist** of the steps it breaks into — read it first, and tick each item off as you finish it, so your progress is recorded while you work instead of only in the closing note. Main writes these items; add one yourself only if you hit a step that is genuinely missing from the list.
@@ -57,3 +60,4 @@ This document records the task-manager workflow: when and how to run `task.sh`. 
 
 - **Main** coordinates and assigns work; you handle your own queue. If your queue is empty, notify main (`SendMessage`), don't just go quiet.
 - Other agents are notified of your status changes automatically via the inbox — always update status via `task.sh`.
+__AGENT_BLOCK__

@@ -18,8 +18,8 @@
  *
  * The optional `lang` field (the board's current UI language) is persisted as the
  * project's preferred language in a small `.board-lang` file next to tasks.json — NOT
- * inside any task. engine/task.sh reads it on every invocation and prints a reminder, so
- * an agent running task.sh next knows which language to reply/work in.
+ * inside any task. `engine/task.sh lang` reads it on demand — agent templates require
+ * every agent to call it once per session, so it knows which language to reply/work in.
  *
  * Security:
  *   - proc_open ARRAY form → no shell, no injection (no escaping needed on POSIX).
@@ -119,7 +119,7 @@ if (!$known) {
 $dataDir = $ROOT_DIR . '/data/' . $projectId;
 
 // Persist the board's current UI language as this project's preferred language (best
-// effort — never fails the request). engine/task.sh reads this file on every run.
+// effort — never fails the request). `engine/task.sh lang` reads this file on demand.
 $lang = isset($body['lang']) ? (string) $body['lang'] : '';
 if (in_array($lang, ALLOWED_LANGS, true)) {
     @file_put_contents($dataDir . '/.board-lang', $lang);

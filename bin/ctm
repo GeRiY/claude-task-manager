@@ -11,6 +11,10 @@
 #   ctm list                        Registered projects
 #   ctm rm <id> [--force]           Remove a registered project (data + wrapper) — asks first
 #   ctm wrapper <id>                Print a project's generated wrapper task.sh
+#   ctm feedback show [n]           Show the global cross-project feedback log (agents file
+#                                    into it via `task.sh feedback`, from any installed project)
+#   ctm feedback add <cause> <parameter> <explanation>
+#                                    File an entry yourself (same log, actor recorded as "cli")
 #   ctm agent add <name> [desc]     Create a custom ("tm-<name>") teammate definition
 #   ctm up [port]                   Start/check the board with docker; if running, only
 #                                    reconciles; if a port is given, sets it (writes .env)
@@ -113,19 +117,95 @@ case "$cmd" in
   wrapper)
     "$ROOT_DIR/engine/projects.sh" wrapper "$@"
     ;;
+  feedback)
+    # shellcheck source=engine/feedback.sh
+    source "$ROOT_DIR/engine/feedback.sh"
+    sub="${1:-show}"
+    case "$sub" in
+      add)
+        shift
+        [[ $# -ge 3 ]] || die 'usage: ctm feedback add "<cause>" "<parameter>" "<explanation>"'
+        log_feedback "$1" "$2" "$3" "cli" "-" || die "could not write feedback (lock contention?)"
+        echo "logged: $FEEDBACK_FILE"
+        ;;
+      show)
+        shift
+        show_feedback "${1:-}"
+        ;;
+      *) die "usage: ctm feedback {add \"<cause>\" \"<parameter>\" \"<explanation>\" | show [n]}" ;;
+    esac
+    ;;
   agent)
     sub="${1:-}"; shift || true
     case "$sub" in
       add) "$ROOT_DIR/bin/add-agent.sh" "$(pwd)" "$@" ;;
       tools)
-        # Show the effective per-agent tools allow-list that `ctm init` would bake in
-        # (repo config + this project's optional .claude/agent-tools.json override).
+        # Read AND write the per-agent tools allow-list that `ctm init` bakes in (repo config
+        # + this project's .claude/agent-tools.json override). Mirrors `ctm agent block`:
+        # an omitted [name] means "default", i.e. every agent in this project at once.
         # shellcheck source=engine/agent-tools.sh
         source "$ROOT_DIR/engine/agent-tools.sh"
         proj="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
-        print_agent_tools "$proj" "${1:-}" | column -t -s $'\t'
+        tsub="${1:-}"
+        case "$tsub" in
+          set|add|rm)
+            shift
+            # ctm agent tools set <list>          -> project-wide default
+            # ctm agent tools set <name> <list>   -> one agent
+            if [[ $# -ge 2 ]]; then
+              tname="$1"; shift; tlist="$*"
+            elif [[ $# -eq 1 ]]; then
+              tname="default"; tlist="$1"
+            else
+              die "usage: ctm agent tools $tsub [name] <tool,...>"
+            fi
+            case "$tsub" in
+              set) set_agent_tools "$proj" "$tname" "$tlist" ;;
+              add) add_agent_tools "$proj" "$tname" "$tlist" ;;
+              rm)  rm_agent_tools  "$proj" "$tname" "$tlist" ;;
+            esac
+            ;;
+          unset)
+            shift
+            unset_agent_tools "$proj" "${1:-default}"
+            ;;
+          show)
+            shift
+            print_agent_tools "$proj" "${1:-}" | column -t -s $'\t'
+            ;;
+          # No subcommand: `ctm agent tools` / `ctm agent tools <name>` stay a plain listing,
+          # as before.
+          *) print_agent_tools "$proj" "${1:-}" | column -t -s $'\t' ;;
+        esac
         ;;
-      *) die "usage: ctm agent add <name> [description]  |  ctm agent tools [name]" ;;
+      block)
+        # shellcheck source=engine/agent-block.sh
+        source "$ROOT_DIR/engine/agent-block.sh"
+        proj="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+        bsub="${1:-}"; shift || true
+        case "$bsub" in
+          set)
+            # ctm agent block set <file>            -> sets the default block
+            # ctm agent block set <name> <file>      -> sets a per-agent block
+            if [[ $# -ge 2 ]]; then
+              bname="$1"; bfile="$2"
+            elif [[ $# -eq 1 ]]; then
+              bname="default"; bfile="$1"
+            else
+              die "usage: ctm agent block set [name] <file>"
+            fi
+            set_agent_block "$proj" "$bname" "$bfile"
+            ;;
+          unset)
+            unset_agent_block "$proj" "${1:-default}"
+            ;;
+          show|"")
+            print_agent_block "$proj" "${1:-}"
+            ;;
+          *) die "usage: ctm agent block {set [name] <file> | unset [name] | show [name]}" ;;
+        esac
+        ;;
+      *) die "usage: ctm agent add <name> [description]  |  ctm agent tools {show|set|add|rm|unset} [name] [tools]  |  ctm agent block {set|unset|show}" ;;
     esac
     ;;
   up)
@@ -183,11 +263,35 @@ ctm — claude-task-manager CLI
   ctm rm <id> [--force]           Remove a registered project (data + wrapper). Asks for
                                    confirmation first (or requires --force non-interactively).
   ctm wrapper <id>                Print a project's generated wrapper task.sh.
+  ctm feedback show [n]           Show the GLOBAL, cross-project feedback log — bugs/
+                                   observations agents filed about the tool itself via
+                                   `task.sh feedback` (any installed project, any agent).
+                                   Omit n for everything, or pass n for just the last n lines.
+  ctm feedback add <cause> <parameter> <explanation>
+                                   File an entry yourself, same log (actor recorded as "cli").
   ctm agent add <name> [desc]     Create a custom teammate definition in the CURRENT
                                    (already "ctm init"-ed) project — always named "tm-<name>".
-  ctm agent tools [name]          Show the effective per-agent tools allow-list baked in at
+  ctm agent tools [show] [name]   Show the effective per-agent tools allow-list baked in at
                                    init (config: templates/agent-tools.json; project override:
-                                   .claude/agent-tools.json).
+                                   .claude/agent-tools.json). No name = the whole roster.
+  ctm agent tools set [name] <tools>
+                                   Set this PROJECT's allow-list. Omit name to set it for every
+                                   agent at once; pass an agent name (e.g. ctm-be-medior, tm-foo)
+                                   for just that one. Comma-separated, e.g. "Read, Bash, Edit".
+  ctm agent tools add [name] <tools>
+  ctm agent tools rm  [name] <tools>
+                                   Add to / remove from the current effective list. A small
+                                   mandatory core (Bash, Read, SendMessage) cannot be removed —
+                                   without it an agent cannot run task.sh at all.
+  ctm agent tools unset [name]    Drop the project override, falling back to the built-in list.
+  ctm agent block set [name] <file>
+                                   Upload a Markdown file as a "project block" appended to a
+                                   generated agent's body at init. Omit name to set the
+                                   default block (used when no per-agent block matches);
+                                   pass an agent name (e.g. ctm-be-medior, tm-foo) for a
+                                   per-agent block. Stored in .claude/agent-blocks/.
+  ctm agent block unset [name]    Remove a project block override (default if name omitted).
+  ctm agent block show [name]     Show the effective block(s) that `ctm init` would bake in.
   ctm up [port]                   Check/start the board with docker. Starts it if not
                                    running; does nothing if already running; if you also give
                                    a port, sets it and restarts if needed.

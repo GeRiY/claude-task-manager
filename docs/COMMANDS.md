@@ -17,7 +17,7 @@ task.sh help
 ## The `--as <agent>` rule
 
 **Every non-meta command requires `--as <agent-name>`** — your own identity (the main agent
-uses `--as main`; a teammate uses its own name, e.g. `--as backend-dev`). It is recorded as
+uses `--as main`; a teammate uses its own name, e.g. `--as ctm-be-medior`). It is recorded as
 the `by` field on every note/history entry and event, and it's how the inbox hook knows who
 to deliver fresh events to. Without it, a non-meta command fails outright.
 
@@ -45,10 +45,22 @@ The **meta commands are exempt** (no `--as` needed): `help`, `inbox`, `init`, `v
 
 | Command | What it does |
 |---|---|
-| `assign <id> <agent>` | Set `assignedAgentId` directly. |
-| `claim <id> [agent]` | **Atomic, race-safe**: flips a `todo` to `in_progress` and assigns it to the `--as` caller in one locked write; refuses if another agent already claimed it. |
-| `next [--claim]` | The next recommended `todo` (no open dependency), by priority. `--claim` atomically takes it, walking to the next candidate if the first is taken in the race window. |
+| `assign <id> <agent>` | Set `assignedAgentId` directly. **Required before anyone can claim.** |
+| `claim <id> [agent]` | **Atomic, race-safe**: flips a `todo` **assigned to the `--as` caller** to `in_progress` in one locked write; refuses if another agent already claimed it. |
+| `next [--claim]` | The next recommended `todo` (no open dependency), by priority — **scoped to the `--as` caller**. `--claim` atomically takes it, walking to the next candidate if the first is taken in the race window. |
 | `handoff <id> <to> [note]` | Reassign to `<to>` and send them a **directed** inbox ping (`‼️`) — the explicit way to route a finding/bug/sub-task to a specific teammate. |
+
+### `claim` is strict: only the assignee may claim
+
+A task assigned to **somebody else**, or assigned to **nobody**, is refused. There is no
+tag-based self-service — a `backend` tag does **not** make a task yours. **Main must
+`assign` every task explicitly** (or route it with `handoff`), or it can never be claimed at
+all.
+
+`next` follows the same rule: it is **scoped to the `--as` caller** — it lists (and
+`--claim` takes) only the todos assigned to that agent, matching what `claim` would actually
+allow, so it can never advertise another agent's work. For an unscoped overview of
+everything ready, main uses `list todo`.
 
 ## Review
 
@@ -80,7 +92,7 @@ board card. A real, independent unit of work still belongs in `dep`/`handoff`.
 | Command | What it does |
 |---|---|
 | `checklist <id>` | List the task's checklist items. |
-| `checklist <id> add <text>...` | Add one or more items (stable `c<n>` ids, never reused). |
+| `checklist <id> add <text>...` | Add one or more items (stable `c<n>` ids, never reused). Phrase each as a short SENTENCE, not a one/two-word label — "patch the null check in Login.php", not "patch". |
 | `checklist <id> done <item-id>...` / `undo <item-id>...` | Tick / untick items. |
 | `checklist <id> rm <item-id>...` | Remove items. |
 
@@ -103,11 +115,11 @@ machine-readable pointer to a change, kept out of the free-text note.
 | Command | What it does |
 |---|---|
 | `list [status] [filters]` | Terse list: `<id> [status] (prio) @module title #tag`. Filters: `--tag`, `--agent`, `--priority`, `--module`, `--all` (include archived), `--json`. |
-| `ids [status]` | Just the ids, one per line. |
+| `ids [status] [--all]` | Just the ids, one per line. Archived tasks are excluded unless `--all`. |
 | `get <id>` | One task's full JSON (not the whole file). |
 | `field <id> <field>` | The raw value of one field of one task. |
-| `summary` | Count by status + total. |
-| `find <text>` | Title/description search (case-insensitive), terse list. |
+| `summary [--all]` | Count by status + total. Archived tasks are excluded unless `--all`. |
+| `find <text> [--all]` | Title/description search (case-insensitive), terse list. Archived tasks are excluded unless `--all`. |
 | `deps <id>` | What a task waits on and what it blocks. |
 | `history <id>` | One task's history entries, terse. |
 
@@ -132,12 +144,15 @@ machine-readable pointer to a change, kept out of the free-text note.
 ```bash
 task.sh list todo --priority high --as main
 task.sh add fix-login "Login fix" "Login returns 500" --as main
-task.sh next --claim --as backend-dev            # take the top ready todo, race-safe
-task.sh handoff fix-login backend-dev "404 on the export route" --as playwright-tester
-task.sh review fix-login main "done, please review" --as backend-dev
+task.sh assign fix-login ctm-be-medior --as main      # route it — a teammate cannot take it otherwise
+task.sh next --claim --as ctm-be-medior               # take your top ready todo, race-safe
+task.sh claim fix-login --as ctm-be-medior            # take a specific todo of YOURS -> in_progress
+task.sh handoff fix-login ctm-be-medior "404 on the export route" --as ctm-playwright-tester
+task.sh review fix-login main "done, please review" --as ctm-be-medior
 task.sh review-queue main --as main               # what's waiting for my sign-off
 task.sh stale --older-than 24h --as main          # stuck in_progress/review tasks
-task.sh checklist fix-login add "add the route" "wire up the form" --as main
-task.sh files fix-login add /abs/path/to/file.php --as backend-dev
-task.sh inbox backend-dev                         # (meta: no --as) fresh events
+task.sh checklist fix-login add "add the /discount route to the API" "wire the discount field into the checkout form" --as main
+  # each item a short SENTENCE, not a one/two-word label — "route" tells nobody anything
+task.sh files fix-login add /abs/path/to/file.php --as ctm-be-medior
+task.sh inbox ctm-be-medior                           # (meta: no --as) fresh events
 ```

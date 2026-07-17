@@ -1,0 +1,45 @@
+{
+  "//": "Single source of truth for the generated teammate ROSTER (name -> area, tier, model).",
+  "//generated": "install.sh renders templates/agents/dev.md.tmpl once per entry in `agents`, splicing in the matching templates/agent-tiers/<tier>.md fragment.",
+  "//standalone": "ctm-investigator / ctm-playwright-tester are NOT listed here — they keep their own templates/agents/<name>.md.tmpl. engine/roster.sh unions both sources; that union is what `ctm agent tools` / `ctm agent block show` enumerate.",
+  "//tools": "Tool allow-lists deliberately live in agent-tools.json, NOT here — a project must be able to override them via .claude/agent-tools.json without touching this file.",
+  "//model": "junior=haiku, medior=sonnet, senior=opus. The senior (opus) tier may only be LAUNCHED with explicit user permission — see the roster section of templates/SKILL.md.tmpl.",
+  "//color": "Claude Code accepts exactly 8 named colors (red, blue, green, yellow, purple, orange, pink, cyan) — no hex, no shade variants, and an unknown name is silently ignored. So the tiers are separated by INTENSITY within a hue family instead: backend cool (cyan -> blue -> purple), frontend warm (yellow -> orange -> red). Area is readable from the temperature, seniority from the depth. The remaining two go to the standalone agents: ctm-playwright-tester=green, ctm-investigator=pink.",
+  "//naming": "Every name in this file is prefixed 'ctm-' — the whole base roster (launch name AND task-manager --as identity, they are the same string, nothing stripped) lives in the 'ctm-' namespace. Custom, hand-added agents (via `ctm agent add`) live in the 'tm-' namespace instead, and add-agent.sh refuses any short name starting with 'ctm-' for exactly this reason — the two namespaces must never collide.",
+
+  "areas": {
+    "backend": {
+      "label": "BACKEND",
+      "word": "backend",
+      "tag": "backend",
+      "junior": "ctm-be-junior",
+      "medior": "ctm-be-medior",
+      "senior": "ctm-be-senior",
+      "peerMedior": "ctm-fe-medior",
+      "exampleFiles": "/abs/path/to/EventSaveService.php /abs/path/to/routes.php",
+      "workNote": "During fan-out, **do not** run a build/test/formatter per file — just edit + use read-only `mcp__ide__getDiagnostics`; main runs it once, serially.",
+      "domainNote": "**if the project's CLAUDE.md or other documentation states a constraint (e.g. a migration/seed ban), always follow it.**"
+    },
+    "frontend": {
+      "label": "FRONTEND",
+      "word": "frontend",
+      "tag": "frontend",
+      "junior": "ctm-fe-junior",
+      "medior": "ctm-fe-medior",
+      "senior": "ctm-fe-senior",
+      "peerMedior": "ctm-be-medior",
+      "exampleFiles": "/abs/path/to/Component.vue /abs/path/to/style.css",
+      "workNote": "During fan-out, **do not** run a build/dev server/formatter — just edit the file + use read-only `mcp__ide__getDiagnostics`; the build/verify is run once, serially, by main.",
+      "domainNote": "**if the project's CLAUDE.md or other documentation states a constraint, always follow it.**"
+    }
+  },
+
+  "agents": [
+    { "name": "ctm-be-junior", "area": "backend",  "tier": "junior", "model": "haiku",  "color": "cyan" },
+    { "name": "ctm-be-medior", "area": "backend",  "tier": "medior", "model": "sonnet", "color": "blue" },
+    { "name": "ctm-be-senior", "area": "backend",  "tier": "senior", "model": "opus",   "color": "purple" },
+    { "name": "ctm-fe-junior", "area": "frontend", "tier": "junior", "model": "haiku",  "color": "yellow" },
+    { "name": "ctm-fe-medior", "area": "frontend", "tier": "medior", "model": "sonnet", "color": "orange" },
+    { "name": "ctm-fe-senior", "area": "frontend", "tier": "senior", "model": "opus",   "color": "red" }
+  ]
+}

@@ -86,7 +86,7 @@ ctm init                          # id/label = a mappa neve
 ```
 
 Ez létrehozza a `.claude/skills/task-manager/task.sh`-t (docker-mentes wrapper), a
-telepített `SKILL.md`-t, a négy alap teammate-agentet (lásd lentebb), és a
+telepített `SKILL.md`-t, a nyolc alap teammate-agentet (lásd lentebb), és a
 Bash-jogosultsági hookokat, amelyek lehetővé teszik ezeknek az agenteknek, hogy
 rákérdezés nélkül hívják a `task.sh`-t. Az újrafuttatott `ctm init` idempotens, és sosem
 nyúl a `data/<id>/`-hoz vagy a saját egyedi `tm-*` agent-fájljaidhoz.
@@ -94,9 +94,9 @@ nyúl a `data/<id>/`-hoz vagy a saját egyedi `tm-*` agent-fájljaidhoz.
 ### 4. Mindennapi `task.sh` példák
 
 ```bash
-task.sh next --claim --as backend-dev            # a legfontosabb kész todo elvétele, race-safe
-task.sh status fix-login in_progress --as backend-dev
-task.sh review fix-login main "kész, kérlek review-zd" --as backend-dev
+task.sh assign fix-login ctm-be-medior --as main     # routolás — enélkül egy teammate nem tudja elvenni
+task.sh next --claim --as ctm-be-medior              # a saját legfontosabb kész todo-d elvétele, race-safe
+task.sh review fix-login main "kész, kérlek review-zd" --as ctm-be-medior
 task.sh list --module auth --as main
 ```
 
@@ -111,15 +111,26 @@ ctm rm <id> [--force]     # projekt törlése a regisztrációból (adat + wrapp
 
 ## Teammate-ek
 
-A `ctm init` négy alap teammate-agentet telepít — **`backend-dev`**, **`frontend-dev`**,
-**`investigator`**, **`playwright-tester`** —, amelyeknek az indítási neve *egyben* a
-task-manager identitása is, plusz egy `main` koordinátor agentet, amely kiosztja a
-munkát és review-zi az eredményeket. A munka `todo → in_progress → review → done`
-állapotokon megy át; egy teammate sosem zárja `done`-ra a saját feladatát, hanem
-`review`-ba küldi, és a main dönt. Ha a négy alap szerepkörön felül másra is szükséged
-van, a `ctm agent add <name>` egyedi `tm-*` agentet hoz létre.
+A `ctm init` nyolc alap teammate-agentet telepít, amelyeknek az indítási neve *egyben* a
+task-manager identitása is, plusz egy `main` koordinátor agentet, amely kiosztja a munkát
+és review-zi az eredményeket:
 
-A teljes modell — szerepkörök, a `tm-*` konvenció, az agentenkénti tool-allowlistek, és
+- egy **szintezett dev roster** — **`ctm-be-junior`**, **`ctm-be-medior`**, **`ctm-be-senior`** a
+  backendre és **`ctm-fe-junior`**, **`ctm-fe-medior`**, **`ctm-fe-senior`** a frontendre, ahol **a
+  szint maga a modell** (junior = haiku, medior = sonnet, senior = opus). **A medior az
+  alapértelmezett igásló**; az opuson futó seniorok kizárólag a te kifejezett engedélyeddel
+  indíthatók.
+- **`ctm-investigator`** (csak olvasásra szolgáló kódvizsgálat) és **`ctm-playwright-tester`**
+  (viselkedés ellenőrzése valódi böngészőben).
+
+A roster egy **étlap, nem indítási lista** — továbbra is 3-4 fusson egyszerre. A munka
+`todo → in_progress → review → done` állapotokon megy át; egy teammate sosem zárja `done`-ra
+a saját feladatát, hanem `review`-ba küldi, és a main dönt. A mainnek explicit módon
+`assign`-olnia kell a taskot — a `claim` szigorú, és csak a hozzárendelt agent veheti el.
+Ha az alap rosteren felül másra is szükséged van, a `ctm agent add <name>` egyedi `tm-*`
+agentet hoz létre.
+
+A teljes modell — a szintek, a `tm-*` konvenció, az agentenkénti tool-allowlistek, és
 hogy hány teammate-et érdemes egyszerre futtatni: **[docs/AGENTS.hu.md](https://github.com/GeRiY/claude-task-manager/blob/main/docs/AGENTS.hu.md)**.
 
 ## Nyelv / i18n
@@ -131,8 +142,9 @@ URL-ben is, így egy board-link megosztható egy adott nyelven.
 ![Kanban board, angol — a kétnyelvű felület bizonyítéka](https://raw.githubusercontent.com/GeRiY/claude-task-manager/main/docs/screenshots/demo-en-board.png)
 
 A nyelv **nem** kerül semelyik taskba vagy jegyzetbe — egy kis `data/<id>/.board-lang`
-fájlban él, és az `engine/task.sh` minden hívásnál beolvassa, hogy emlékeztesse (stderr-en
-keresztül) a hívó agentet, milyen nyelvet használt a human a boardon.
+fájlban él. Az `engine/task.sh lang` olvassa be, és jelenti, milyen nyelvet használt a
+human a boardon; minden generált agent-sablon megköveteli, hogy az agent session-enként
+egyszer lekérdezze ezt (lásd a saját definíciójának "task.sh — calling rules" szakaszát).
 
 ## Naprakészen tartás
 

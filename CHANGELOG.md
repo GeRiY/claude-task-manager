@@ -5,6 +5,79 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.0] - 2026-07-17
+
+### Added
+- **A tiered dev roster replaces the two flat dev agents.** `ctm init` now installs six
+  generated dev teammates — `ctm-be-junior`/`ctm-be-medior`/`ctm-be-senior` for backend and
+  `ctm-fe-junior`/`ctm-fe-medior`/`ctm-fe-senior` for frontend — rendered from ONE template
+  (`templates/agents/dev.md.tmpl`) plus `templates/agents-manifest.json`, with the matching
+  `templates/agent-tiers/{junior,medior,senior}.md` fragment spliced in. **The tier IS the
+  model**: junior = haiku, medior = sonnet (the default workhorse), senior = opus — and the
+  opus seniors may only be launched with the user's explicit permission. Main no longer
+  passes a `model` parameter at launch; it picks the right agent instead. The new
+  `engine/roster.sh` is the single source of truth for the roster (manifest entries plus the
+  standalone templates), so `install.sh`, `ctm agent tools`, `ctm agent block` and
+  `add-agent.sh` can never drift from what actually gets generated.
+- **`ctm agent tools set|add|rm|unset` — the per-agent tools allow-list is now editable from
+  the CLI.** These write the project's `.claude/agent-tools.json` override; omitting the
+  agent name targets `default`, i.e. every agent in the project at once. A small mandatory
+  core (`Bash, Read, SendMessage`) is unioned into every resolved list and `rm` refuses to
+  drop it — without it an agent cannot run `task.sh` or reach main at all. `ctm agent tools
+  [show] [name]` remains the read side.
+- **`ctm agent block set|unset|show` — project blocks.** A Markdown file can now be baked
+  into a generated agent's body at `ctm init` time (per-agent or as a default for everyone),
+  stored under `.claude/agent-blocks/` with the same precedence model as agent-tools
+  (`engine/agent-block.sh`). The prescribed way to give teammates project-specific rules
+  without hand-editing generated files.
+- **A global, cross-project feedback log for the tool itself.** `task.sh feedback "<cause>"
+  "<parameter>" "<explanation>"` lets any agent in any installed project report a bug or odd
+  behavior in claude-task-manager to a shared one-line-per-entry log
+  (`data/_feedback.log`, gitignored) — deliberately NOT the project's tasks.json. The
+  maintainer reads it back with `ctm feedback show [n]` and can file entries by hand with
+  `ctm feedback add` (`engine/feedback.sh`).
+- **`task.sh guide` — scenario-driven documentation.** A "when X happens, run Y" walkthrough
+  of the real end-to-end sequences (main routing work, a teammate's turn, handoffs, stuck
+  tasks, customizing tools/blocks, filing feedback), as opposed to `help`'s flag-by-flag
+  reference. The SKILL template now instructs every agent to read it once per session,
+  first thing.
+- **`task.sh lang`** — reports the project's preferred board language on demand (new meta
+  command, no `--as` needed). Agent templates require calling it once per session; it
+  replaces the old per-invocation stderr reminder.
+- **`--all` on `ids`, `summary` and `find`** — these three now exclude archived tasks by
+  default, matching `list`; pass `--all` to include them.
+- **A user-facing how-to for humans**: `docs/discussions/claude-code-ctm-guide.md` (and its
+  Hungarian counterpart) — how to drive the board through Claude Code in plain language,
+  told through user stories.
+
+### Changed
+- **The whole base roster moved into the `ctm-` namespace**: `investigator` →
+  `ctm-investigator`, `playwright-tester` → `ctm-playwright-tester`, and the tiered dev set
+  is `ctm-*` from birth. The launch name IS the task-manager identity — nothing is stripped
+  anymore for base agents (custom agents keep the `tm-*` prefix with the stripped `--as`
+  identity). `ctm agent add` refuses any `ctm-*` name and reserves the roster names via
+  `roster.sh` instead of a hardcoded list that would rot.
+- **`claim` and `next` are now strictly assignee-scoped.** Only the agent a task is already
+  assigned to may claim it — a task assigned to somebody else, or to nobody, is refused, and
+  `next` lists/claims only the caller's OWN ready todos. There is no tag-based self-service:
+  routing work is main's job, done explicitly with `assign`/`handoff`. Docs, SKILL and the
+  agent templates all spell out that an unassigned task sits still forever.
+- **Agent-tools precedence flipped so the project config wins entirely.** The project's
+  `.default` now ranks above the repo's per-agent entries — previously a project-wide
+  setting was silently ignored for any agent the repo happened to name, which was most of
+  them. `ctm agent tools set` warns when a project default shadows a repo per-agent entry.
+- **New HARD RULE in the generated SKILL.md: agents are USERS of claude-task-manager, not
+  its developers.** Teammates must treat `task.sh` as a black box, never read the tool's own
+  source from inside a target project, and file `task.sh feedback` when something is
+  unclear or looks wrong instead of going to read or patch the implementation.
+- **Checklist items must be phrased as short sentences**, not one/two-word labels — `help`,
+  SKILL and the guide all now say so, since a bare "patch" tells the (possibly junior)
+  assignee nothing actionable.
+
+### Removed
+- **`templates/agents/backend-dev.md.tmpl` and `frontend-dev.md.tmpl`** — the two flat dev
+  agents are fully replaced by the generated six-agent tier set above.
+
 ## [1.3.0] - 2026-07-16
 
 ### Changed
