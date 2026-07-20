@@ -19,12 +19,32 @@ The **View** control offers four buttons:
   each teammate's queue at a glance.
 - **Feed** — a flat, reverse-chronological activity feed instead of columns, useful for
   "what just happened."
-- **Compact** — not a fourth layout on its own, but a density toggle that applies on top of
-  Kanban/Swimlane: cards render smaller, with less per-card detail, so more of the board
-  fits on screen.
+- **Archive** — archived tickets that have been dropped from the live columns, listed in
+  reverse-chronological order (`?view=archive`). A segmented switch groups them **by day**
+  (`?agroup=day`, the default — each day header carries a count and a throughput mini-bar)
+  or **by module** (`?agroup=module`). Each row shows the done-check (or a status pill),
+  title, agent avatar, a cycle-time badge, and a relative close time, and the `#stats` bar
+  switches to archive metrics (total archived, closes-per-day average, average lead time,
+  and the count still open).
 
-The current view (and the compact toggle) persists in `localStorage` and is reflected in
-the URL, so a board link reopens in the same layout.
+**Compact** is not a fourth layout on its own, but a density toggle that applies on top of
+Kanban/Swimlane: cards render smaller, with less per-card detail, so more of the board
+fits on screen.
+
+The current view (and the compact and archive-grouping toggles) persists in `localStorage`
+and is reflected in the URL, so a board link reopens in the same layout.
+
+## The command palette (⌘K)
+
+Search and navigation both run through the **command palette**, a single overlay opened
+with **⌘K / Ctrl+K**, with **`/`** (when the focus is not in an input), or by clicking the
+**`⌘K` chip** in the header; Escape closes it. One field does **fuzzy search over tickets**
+(title, id, agent, module, and note text) *and* a **command catalog** — view switch,
+compact toggle, archive grouping, HU/EN, pause/resume polling, refresh, open
+Context/Projects — plus the live lists of projects, agents, and modules; results are
+grouped under Tickets / Commands / Recent. An empty field shows the last five things you
+opened; a leading `>` narrows to commands only. Arrow keys move, **Enter** opens the task
+modal, and **⌘Enter** scrolls to the card on the board and flashes it.
 
 ## Filtering
 
@@ -34,10 +54,11 @@ the URL, so a board link reopens in the same layout.
   the selection is deep-linkable as a comma-separated `?module=` query parameter, mirroring
   the agent filter.
 - **Agent filter** — narrows the board to one or more assignees.
-- **Quick filters** — three one-click toggles above the board: **Awaiting you** (tasks in
-  `review`), **Active** (`in_progress`), and **Blocked**. Deep-linkable via `?quick=`.
-- **Search** (`q`) and **sort** (last activity / created / title / team #) — also
-  deep-linkable (`?q=`, `?sort=`).
+- **Search** now lives in the **command palette** (⌘K, see above), not a header field —
+  fuzzy-matching tickets by title, id, agent, module, and note text. Status-based filtering
+  (the former Awaiting-you / Active / Blocked shortcuts) is reachable as palette commands
+  and through the board controls.
+- **Sort** (last activity / created / title / team #) is deep-linkable via `?sort=`.
 
 ## The task modal
 
@@ -59,8 +80,10 @@ Clicking a card opens the task's modal, which includes:
 - **History** (`History (n)`) — the terse status-transition timeline, each entry's `by` and
   touched `files` included where recorded.
 - The primary action buttons (Approve / Changes needed / Block / Reopen / Starting / To
-  review / Done) plus a free-text note field, driving the same `review`/`status`/`note`
-  commands described in [COMMANDS.md](https://github.com/GeRiY/claude-task-manager/blob/main/docs/COMMANDS.md).
+  review / Done, plus **To do** on done/review and an **Archive** button in every status)
+  and a free-text note field, driving the same `review`/`status`/`note`/`archive` commands
+  described in [COMMANDS.md](https://github.com/GeRiY/claude-task-manager/blob/main/docs/COMMANDS.md).
+  An archived ticket opens read-only, with just **Unarchive** and **Reopen**.
 
 ## The projects picker
 
@@ -75,7 +98,7 @@ project's board directly.
 The board's full state lives in the URL, so any view is bookmarkable/shareable:
 
 ```
-?project=<id>&lang=<en|hu>&task=<id>&agent=<a1,a2>&module=<m1,m2>&quick=<review|active|blocked>&q=<text>&sort=<activity|created|title|team>&view=<board|swim|feed>&compact=1
+?project=<id>&lang=<en|hu>&task=<id>&agent=<a1,a2>&module=<m1,m2>&sort=<activity|created|title|team>&view=<board|swim|feed|archive>&agroup=<day|module>&compact=1
 ```
 
 `project` and `lang` are the two most commonly shared: they open the board directly on one

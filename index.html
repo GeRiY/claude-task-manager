@@ -48,10 +48,21 @@
 <header class="shadow-sm dark:shadow-black/40 transition-shadow">
   <div class="hd-left">
     <h1 class="tracking-tight"><span class="logo" aria-hidden="true"><i></i><i></i><i></i></span> Task Manager</h1>
+    <label class="ctl" data-i18n-title="hd.poll" title="Poll">
+      <select id="interval">
+        <option value="1000">1s</option><option value="2000" selected>2s</option>
+        <option value="5000">5s</option><option value="10000">10s</option>
+      </select>
+    </label>
+    <button id="notifyBtn" data-i18n-title="hd.notifyTitle" title="Browser notification on status change (→ review / done)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.7 21a2 2 0 0 1-3.4 0"></path></svg></button>
+    <button id="refresh"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 11a8 8 0 1 0-.7 3.2"></path><path d="M20 4.5V11h-6.5"></path></svg></button>
+    <button id="toggle" data-i18n-title="hd.pause" title="Pause"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1"></rect><rect x="14" y="5" width="4" height="14" rx="1"></rect></svg></button>
     <div class="status"><span class="dot" id="dot"></span><span id="statusText" data-i18n="app.starting">starting…</span><span class="clock" id="clock"></span></div>
+    <button id="langBtn" title="Switch language / Nyelv váltása">HU</button>
+    <label class="ctl" data-i18n-title="hd.asTitle" title="Who the board writes as (task.sh --as). Pick an agent/reviewer, not a fixed &quot;human&quot;."><svg class="ico ico-accent" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="3.4"></circle><path d="M5.5 20a6.5 6.5 0 0 1 13 0"></path></svg> <span data-i18n="hd.as">As</span> <input id="actor" type="text" list="actorList" data-i18n-placeholder="hd.asPlaceholder" placeholder="e.g. reviewer" spellcheck="false" autocomplete="off"><datalist id="actorList"></datalist></label>
   </div>
   <div class="hd-center">
-    <label class="search-box"><svg class="ico" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.5-3.5"></path></svg> <input id="q" type="search" data-i18n-placeholder="hd.searchPlaceholder" placeholder="search…" spellcheck="false"></label>
+    <button type="button" class="pal-chip" id="palOpenBtn" data-i18n-title="pal.openTitle" title="Open the command palette">⌘K</button>
     <div class="src-box">
       <span class="lbl" data-i18n="hd.source">Source</span>
       <span class="src-dot"></span>
@@ -59,38 +70,32 @@
       <input id="src" type="hidden">
     </div>
   </div>
-  <div class="hd-right">
-    <label class="ctl" data-i18n-title="hd.poll" title="Poll">Poll
-      <select id="interval">
-        <option value="1000">1s</option><option value="2000" selected>2s</option>
-        <option value="5000">5s</option><option value="10000">10s</option>
-      </select>
-    </label>
-    <label class="ctl" data-i18n-title="hd.asTitle" title="Who the board writes as (task.sh --as). Pick an agent/reviewer, not a fixed &quot;human&quot;."><svg class="ico ico-accent" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="3.4"></circle><path d="M5.5 20a6.5 6.5 0 0 1 13 0"></path></svg> <span data-i18n="hd.as">As</span> <input id="actor" type="text" list="actorList" data-i18n-placeholder="hd.asPlaceholder" placeholder="e.g. reviewer" spellcheck="false" autocomplete="off"><datalist id="actorList"></datalist></label>
-    <button id="notifyBtn" data-i18n-title="hd.notifyTitle" title="Browser notification on status change (→ review / done)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.7 21a2 2 0 0 1-3.4 0"></path></svg></button>
-    <button id="projectsBtn" data-i18n-title="hd.projectsTitle" title="Registered projects + copy wrapper task.sh"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="14" rx="2"></rect><path d="M3 9h18"></path></svg> <span data-i18n="hd.projects">Projects</span></button>
-    <button id="ctxBtn"><svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M9 3.5h6l-1 6 3 3v2h-4.2v5.2l-.8 1.8-.8-1.8V14.5H7v-2l3-3-1-6Z"></path></svg> <span data-i18n="hd.context">Context</span></button>
-    <button id="langBtn" title="Switch language / Nyelv váltása">HU</button>
-    <button id="toggle"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1"></rect><rect x="14" y="5" width="4" height="14" rx="1"></rect></svg> <span class="btxt">Pause</span></button>
-    <button id="refresh"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 11a8 8 0 1 0-.7 3.2"></path><path d="M20 4.5V11h-6.5"></path></svg></button>
-  </div>
 </header>
 
 <div class="stats" id="stats"></div>
 <div class="controls" id="controls">
-  <span class="lbl" data-i18n="ctrl.sort">Sort</span>
-  <select id="sort">
-    <option value="activity" data-i18n="ctrl.sort.activity">last activity</option>
-    <option value="created" data-i18n="ctrl.sort.created">created</option>
-    <option value="title" data-i18n="ctrl.sort.title">title (A→Z)</option>
-    <option value="team" data-i18n="ctrl.sort.team">Team #</option>
-  </select>
+  <span id="sortGroup">
+    <span class="lbl" data-i18n="ctrl.sort">Sort</span>
+    <select id="sort">
+      <option value="activity" data-i18n="ctrl.sort.activity">last activity</option>
+      <option value="created" data-i18n="ctrl.sort.created">created</option>
+      <option value="title" data-i18n="ctrl.sort.title">title (A→Z)</option>
+      <option value="team" data-i18n="ctrl.sort.team">Team #</option>
+    </select>
+  </span>
   <span class="lbl" data-i18n="ctrl.view">View</span>
   <div class="segmented">
+    <span class="seg-pill" aria-hidden="true"></span>
     <button id="viewBoard" class="on" data-i18n="ctrl.view.board">Kanban</button>
     <button id="viewSwim" data-i18n="ctrl.view.swim">Swimlane</button>
     <button id="viewFeed" data-i18n="ctrl.view.feed">Feed</button>
+    <button id="viewArchive" data-i18n="ctrl.view.archive">Archive</button>
     <button id="compact" data-i18n="ctrl.view.compact">Compact</button>
+  </div>
+  <div class="segmented" id="agroupSeg" hidden>
+    <span class="seg-pill" aria-hidden="true"></span>
+    <button id="agroupDay" class="on" data-i18n="ctrl.agroup.day">By day</button>
+    <button id="agroupModule" data-i18n="ctrl.agroup.module">By module</button>
   </div>
   <span class="sep"></span>
   <span class="lbl" data-i18n="ctrl.module">Module</span>
@@ -111,23 +116,23 @@
       <div class="ms-list" id="moduleMsList"></div>
     </div>
   </div>
-  <span class="sep"></span>
-  <span class="lbl" data-i18n="ctrl.quickFilter">Quick filter</span>
-  <button id="qfReview" class="qf"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 4h10M7 20h10M8 4v3l4 5 4-5V4M8 20v-3l4-5 4 5v3"></path></svg> <span data-i18n="ctrl.quick.review">Awaiting you</span></button>
-  <button id="qfActive" class="qf" data-i18n="ctrl.quick.active">Active</button>
-  <button id="qfBlocked" class="qf">Blocked</button>
-  <span class="ro"><svg class="ico" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="11" width="14" height="9" rx="2"></rect><path d="M8 11V8a4 4 0 0 1 8 0v3"></path></svg> <span data-i18n="ctrl.readonly">read-only view – the file is written by the agent</span></span>
+  <button id="projectsBtn" data-i18n-title="hd.projectsTitle" title="Registered projects + copy wrapper task.sh"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="14" rx="2"></rect><path d="M3 9h18"></path></svg> <span data-i18n="hd.projects">Projects</span></button>
+  <button id="ctxBtn"><svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M9 3.5h6l-1 6 3 3v2h-4.2v5.2l-.8 1.8-.8-1.8V14.5H7v-2l3-3-1-6Z"></path></svg> <span data-i18n="hd.context">Context</span></button>
 </div>
 <div class="agents-wrap" id="agentsWrap">
-  <button type="button" class="agents-head" id="agentsHead" aria-expanded="true">
-    <span class="lbl" data-i18n="agents.title">Agent load &amp; filter</span>
-    <span class="count-pill" id="agentsCount">0</span>
-    <svg class="chev" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"></path></svg>
-  </button>
+  <div class="agents-head-row">
+    <button type="button" class="agents-head" id="agentsHead" aria-expanded="true">
+      <span class="lbl" data-i18n="agents.title">Agent load &amp; filter</span>
+      <span class="count-pill" id="agentsCount">0</span>
+      <svg class="chev" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"></path></svg>
+    </button>
+    <span class="ro"><svg class="ico" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="11" width="14" height="9" rx="2"></rect><path d="M8 11V8a4 4 0 0 1 8 0v3"></path></svg> <span data-i18n="ctrl.readonly">read-only view – the file is written by the agent</span></span>
+  </div>
   <div class="agents" id="agents"></div>
 </div>
 <div class="banner" id="banner"></div>
 <div class="board" id="board"></div>
+<div id="srLive" class="sr-only" aria-live="polite" aria-atomic="true"></div>
 
 <div class="overlay backdrop-blur" id="overlay">
   <div class="modal" role="dialog" aria-modal="true">
@@ -150,6 +155,24 @@
     <header><h2 data-i18n="project.modalTitle">📁 Projects</h2><button class="close" id="projectsClose" data-i18n="modal.close">✕ Close</button></header>
     <div class="modal-banner"></div>
     <div class="body" id="projectsBody"></div>
+  </div>
+</div>
+
+<!-- Parancspaletta (⌘K / Ctrl+K / "/") — docs/REDESIGN-TERV.md #6.8 -->
+<div class="overlay pal-overlay" id="palette" role="dialog" aria-modal="true" aria-label="Command palette">
+  <div class="pal-panel">
+    <div class="pal-input-row">
+      <svg class="ico" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.5-3.5"></path></svg>
+      <input id="palInput" type="text" role="combobox" aria-expanded="true" aria-controls="palList" aria-autocomplete="list" autocomplete="off" spellcheck="false" data-i18n-placeholder="pal.placeholder" placeholder="Search tickets or type a command…">
+      <span class="pal-esc-chip">esc</span>
+    </div>
+    <div class="pal-list" id="palList" role="listbox"></div>
+    <div class="pal-footer">
+      <span>↑↓ <span data-i18n="pal.nav">navigate</span></span>
+      <span>↵ <span data-i18n="pal.openHint">open</span></span>
+      <span>⌘↵ <span data-i18n="pal.jump">jump to card</span></span>
+      <span>esc <span data-i18n="pal.close">close</span></span>
+    </div>
   </div>
 </div>
 

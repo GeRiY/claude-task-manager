@@ -13,52 +13,104 @@
   status accents.
 */
 
-/* Hardcoded DARK theme – always dark regardless of the OS setting. */
+/* Hardcoded DARK theme – always dark regardless of the OS setting.
+   Design tokenek 2.0 (docs/REDESIGN-TERV.md #3): OKLCH világosság-lépcsős elevation,
+   funkció szerinti kontúr-tokenek, 8px spacing-rács, tipográfiai skála, motion-tokenek.
+   A régi tokennevek (--bg/--panel/--card/--border/...) megmaradnak és az újakra
+   mutatnak, hogy a JS inline var(--todo) stb. hivatkozásai változatlanul működjenek. */
 :root {
-  --bg: #0f1115;                /* app background */
-  --panel: #14171d;             /* column / bar / lane background */
-  --panel-2: #181b22;           /* input, select, chip, tag, note card */
-  --panel-3: #232a33;           /* button, count-pill, recessed surface */
-  --card: #1b1f27;              /* card background */
-  --card-hover: #20242e;        /* card hover background */
-  --track: rgba(255,255,255,.06);/* progress / bar track background */
+  /* ---- Elevation-skála: 5 diszkrét L-lépcső, egy hue-n (kék-tintált grafit) ---- */
+  --surface-0: oklch(0.165 0.012 255);  /* app háttér */
+  --surface-1: oklch(0.205 0.013 255);  /* panel, oszlop, sáv */
+  --surface-2: oklch(0.245 0.014 255);  /* kártya, input */
+  --surface-3: oklch(0.285 0.015 255);  /* hover, gomb, chip */
+  --surface-4: oklch(0.325 0.016 255);  /* popover, modal, parancspaletta */
 
-  --text: #e6e8ec;              /* primary text */
-  --text-strong: #f0f2f4;       /* heading, emphasized number */
-  --muted: #9aa0aa;             /* secondary text */
-  --muted-2: #656b76;           /* faint label / icon */
+  --bg: var(--surface-0);
+  --panel: var(--surface-1);
+  --panel-2: var(--surface-2);
+  --panel-3: var(--surface-3);
+  --card: var(--surface-2);
+  --card-hover: var(--surface-3);
+  --track: oklch(1 0 0 / 0.06);
 
-  --border: rgba(255,255,255,.07);
-  --border-soft: rgba(255,255,255,.05);
-  --border-strong: rgba(255,255,255,.13);
+  /* ---- Szövegszínek: kontraszt-minimum kikényszerítve (WCAG 2.2 SC 1.4.3) ---- */
+  --text-strong: oklch(0.96 0.005 255);  /* ~14:1 a --surface-1-en — cím, kiemelt szám */
+  --text: oklch(0.90 0.008 255);         /* ~11:1 — törzsszöveg */
+  --muted: oklch(0.72 0.012 255);        /* ~5.5:1 — másodlagos szöveg, kis méretben is AA */
+  --muted-2: oklch(0.62 0.012 255);      /* ~3.6:1 — CSAK ikonra / ≥14px félkövérre, apró szövegre TILOS */
+
+  /* ---- Kontúr-tokenek: funkció szerint, nem csak erősség szerint ---- */
+  --border-hairline: oklch(1 0 0 / 0.06);  /* dekoratív elválasztó */
+  --border-ui: oklch(1 0 0 / 0.14);        /* interaktív elem nyugalmi kontúrja */
+  --border-ui-hover: oklch(1 0 0 / 0.22);
+  --border-focus: var(--accent);
+  --border: var(--border-ui);
+  --border-soft: var(--border-hairline);
+  --border-strong: var(--border-ui-hover);
 
   --shadow: 0 1px 2px rgba(0,0,0,.4);
   --shadow-lg: 0 8px 22px -10px rgba(0,0,0,.6);
   --shadow-modal: 0 24px 60px -16px rgba(0,0,0,.7);
 
-  /* Status accents (the mockup's STATUS palette). The JS references them via var(--...). */
-  --todo: #8b93a1; --in_progress: #4f8ff7; --blocked: #f2635e;
-  --review: #b57cf6; --done: #46c07f;
+  /* ---- Státuszpaletta: rögzített L=0.72, csak a chroma/hue vált státuszonként,
+     Okabe-Ito-elvű hue-kiosztás (CVD-biztonságos öt szín). ---- */
+  --todo:        oklch(0.72 0.02  250);  /* semleges szürkéskék */
+  --in_progress: oklch(0.72 0.14  250);  /* kék */
+  --review:      oklch(0.72 0.15  305);  /* lila */
+  --done:        oklch(0.72 0.14  155);  /* zöld */
+  --blocked:     oklch(0.68 0.17   25);  /* vörös — fél lépéssel sötétebb+telítettebb: vészjelzés */
+  --warn:        oklch(0.78 0.13   80);  /* borostyán (await-warn, idle, WIP) */
 
-  /* --ok/--err: on the .dot status indicator (WCAG 1.4.11 ≥3:1 on dark panel) */
-  --ok: #46c07f; --err: #f2635e; --accent: #5b8def;
+  /* --ok/--err: szándékosan a done/blocked azonosa (ugyanaz a szemantika) */
+  --ok: var(--done); --err: var(--blocked); --accent: oklch(0.70 0.14 262);
+  --accent-solid: oklch(0.55 0.16 262);   /* tömör gombháttér, fehér szöveggel ≥4.5:1 */
 
-  /* Additional contrast-purpose tokens (WCAG AA), with dark values */
-  --accent-solid: #3f6fd6;      /* solid accent background + white text (button.on, badge.team, ctx-badge) */
   --pill-fg-light: #ffffff;     /* pill text on todo/in_progress/blocked background */
   --pill-fg-dark: #12151b;      /* pill text on review/done (lighter) background */
-  --danger-text: #e8837f;       /* dep-badge / note / banner text */
-  --danger-bg: rgba(242,99,94,.11);   /* dep-badge / note / banner background */
-  --danger-border: rgba(242,99,94,.26);
-  --accent-tint-text: #9fc0ff;  /* .badge.ch text */
-  --accent-tint-bg: rgba(91,141,239,.14); /* .badge.ch background */
+  --danger-text: oklch(0.80 0.11 25);
+  --danger-bg: color-mix(in oklch, var(--blocked) 15%, transparent);
+  --danger-border: color-mix(in oklch, var(--blocked) 32%, transparent);
+  --accent-tint-text: oklch(0.83 0.07 262);
+  --accent-tint-bg: color-mix(in oklch, var(--accent) 15%, transparent);
+  --warn-text: oklch(0.82 0.10 80);
+  --warn-bg: color-mix(in oklch, var(--warn) 16%, transparent);
+  --warn-border: color-mix(in oklch, var(--warn) 34%, transparent);
 
   /* Unified border-radius scale for card/button/panel-level elements. */
-  --radius-sm: 6px; --radius-md: 9px; --radius-lg: 13px; --radius-full: 999px;
+  --radius-sm: 6px; --radius-md: 8px; --radius-lg: 12px; --radius-full: 999px;
+
+  /* ---- Spacing-rács: 8px alaprács, 4px alráccsal ---- */
+  --sp-1: 4px; --sp-2: 8px; --sp-3: 12px; --sp-4: 16px; --sp-5: 24px; --sp-6: 32px;
+
+  /* ---- Tipográfiai skála (méret/sorköz) ---- */
+  --fs-xs: 11px; --fs-sm: 12px; --fs-base: 13px; --fs-md: 14px; --fs-lg: 16px; --fs-xl: 20px;
+
+  /* ---- Motion-tokenek: minden animáció ebből építkezik, sehol beégetett duration/easing ---- */
+  --dur-fast: 120ms;      /* hover, toggle, ikon */
+  --dur-base: 200ms;      /* belépés, kis mozgás */
+  --dur-move: 260ms;      /* kártyamozgás oszlopok közt */
+  --dur-slow: 400ms;      /* modal, nézetváltás */
+  --dur-flash-hold: 250ms; --dur-flash-fade: 900ms;
+  --ease-out: cubic-bezier(0.05, 0.7, 0.1, 1);   /* MD3 emphasized-decelerate */
+  --ease-in:  cubic-bezier(0.3, 0, 0.8, 0.15);   /* MD3 emphasized-accelerate */
+  --ease-std: cubic-bezier(0.2, 0, 0, 1);        /* MD3 standard */
 
   --font: "Geist", system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   --mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
+/* Progresszív feljavítás (5.5): height:auto↔0 animálhatóvá válik a collapse-elemeken
+   (agents-sáv, archívum-napok) a támogató böngészőkben; ahol nincs, azonnali nyit/csuk marad. */
+html { interpolate-size: allow-keywords; }
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur-fast: 1ms; --dur-base: 1ms; --dur-move: 1ms; --dur-slow: 1ms;
+    --dur-flash-hold: 1ms; --dur-flash-fade: 300ms;
+  }
+}
+/* Minden dinamikusan frissülő szám tabular-nums — nincs vízszintes remegés pollingnál. */
+.stat b, .count, .ac-count, .js-rel, .js-wait, .clock, .progress-label, .metric b,
+.arch-group-head .count, .badge.rel-sum, .badge.arch-lead { font-variant-numeric: tabular-nums; }
 * { box-sizing: border-box; }
 html, body { height: 100%; }
 body {
@@ -92,18 +144,28 @@ header {
   border-bottom: 1px solid var(--border-soft); position: sticky; top: 0; z-index: 20;
 }
 .hd-left { display: flex; align-items: center; gap: 12px; flex: none; }
-.hd-center { flex: 1 1 auto; display: flex; align-items: center; justify-content: center; gap: 10px; min-width: 0; flex-wrap: wrap; }
+.hd-center { flex: 1 1 auto; display: flex; align-items: center; justify-content: space-between; gap: 10px; min-width: 0; flex-wrap: wrap; }
 .hd-right { display: flex; align-items: center; gap: 8px; flex: none; }
+/* Jobb oldali vezérlők vizuális csoportosítása (6.1): [Poll+As] · [Notify+Projects+Context] · [HU·Pause·Refresh]. */
+.hd-sep { width: 1px; height: 20px; background: var(--border-soft); flex: none; margin: 0 2px; }
 header h1 { display: inline-flex; align-items: center; gap: 10px; font-size: 15.5px; margin: 0; font-weight: 600; letter-spacing: -.01em; color: var(--text-strong); white-space: nowrap; }
-/* Equalizer logo in the header (the mockup's mark). */
+/* Equalizer logo in the header (the mockup's mark) — élő állapotjelzővé válik (6.1):
+   pollingkor finom magasság-hullámzás (transform:scaleY), pause-nál megáll, hibánál vörösre vált. */
 .logo { display: inline-flex; align-items: flex-end; justify-content: center; gap: 2px; width: 31px; height: 31px; border-radius: 9px; background: rgba(91,141,239,.13); border: 1px solid rgba(91,141,239,.32); flex: none; }
-.logo i { width: 3px; border-radius: 1px; background: var(--accent); }
+.logo i { width: 3px; border-radius: 1px; background: var(--accent); transform-origin: bottom; transition: background var(--dur-base) var(--ease-std); }
 .logo i:nth-child(1) { height: 8px; }
 .logo i:nth-child(2) { height: 14px; }
 .logo i:nth-child(3) { height: 6px; }
+.logo.live i { animation: logoWave 2.4s var(--ease-std) infinite; }
+.logo.live i:nth-child(1) { animation-delay: 0s; }
+.logo.live i:nth-child(2) { animation-delay: .15s; }
+.logo.live i:nth-child(3) { animation-delay: .3s; }
+.logo.err i { background: var(--err); }
+@keyframes logoWave { 0%, 100% { transform: scaleY(1); } 50% { transform: scaleY(1.35); } }
+@media (prefers-reduced-motion: reduce) { .logo.live i { animation: none; } }
 /* Header's live clock inside the status pill. */
 .clock { font: 500 12px var(--mono); color: var(--muted-2); }
-label.ctl { color: var(--muted-2); font-size: 11px; font-weight: 500; display: inline-flex; align-items: center; gap: 7px; }
+label.ctl { color: var(--muted); font-size: 11px; font-weight: 500; display: inline-flex; align-items: center; gap: 7px; }
 /* Inline SVG icon alignment + color across the different contexts. */
 .ico { flex: none; display: inline-block; vertical-align: middle; }
 .ico-accent { color: var(--accent); }
@@ -154,9 +216,13 @@ input#src { width: 100%; font-family: var(--mono); font-size: 12px; }
   display: flex; flex-direction: column; gap: 6px; padding: 8px;
   background: var(--panel); border: 1px solid var(--border-strong); border-radius: var(--radius-md);
   box-shadow: var(--shadow-lg);
+  opacity: 1; transform: translateY(0);
+  transition: opacity var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out), display var(--dur-fast) allow-discrete;
 }
-/* .ms-pop's display:flex would override the native [hidden] display:none — explicit reset. */
-.ms-pop[hidden] { display: none; }
+/* .ms-pop's display:flex would override the native [hidden] display:none — explicit reset.
+   Popover nyitás/zárás (5.5): 120ms fade + translateY(-4px)→0, @starting-style-lel display:none-ből is. */
+.ms-pop[hidden] { display: none; opacity: 0; transform: translateY(-4px); }
+@starting-style { .ms-pop:not([hidden]) { opacity: 0; transform: translateY(-4px); } }
 .ms-search { display: flex; align-items: center; gap: 7px; height: 32px; padding: 0 9px; border-radius: var(--radius-sm); background: var(--panel-2); border: 1px solid var(--border); color: var(--muted-2); }
 .ms-search svg { flex: none; }
 .ms-search input { flex: 1; min-width: 0; height: auto; border: none; background: transparent; padding: 0; color: var(--text); font: 500 12px var(--font); }
@@ -169,10 +235,6 @@ input#src { width: 100%; font-family: var(--mono); font-size: 12px; }
 .ms-all { border-bottom: 1px solid var(--border-soft); border-radius: 0; margin-bottom: 2px; padding-bottom: 8px; font-weight: 600; color: var(--muted); }
 .ms-empty { padding: 12px 8px; text-align: center; color: var(--muted-2); font-size: 12px; }
 
-/* Search: icon + input in one shared, recessed box (the mockup's search-box). */
-.search-box { display: inline-flex; align-items: center; gap: 9px; flex: 0 1 260px; min-width: 150px; padding: 0 12px; height: 36px; border-radius: var(--radius-md); background: var(--panel-2); border: 1px solid var(--border); color: var(--muted-2); }
-.search-box input#q { flex: 1; min-width: 0; height: auto; border: none; background: transparent; padding: 0; color: var(--text); }
-.search-box input#q:focus-visible { outline: none; box-shadow: none; }
 
 /* Source: a single native select for switching between projects (no separate button/popover). */
 .src-box { display: inline-flex; align-items: center; gap: 8px; flex: 1 1 260px; min-width: 160px; max-width: 360px; padding: 0 11px; height: 36px; border-radius: var(--radius-sm); background: var(--panel); border: 1px solid var(--border-soft); }
@@ -205,35 +267,53 @@ button:active { transform: translateY(1px); }
 button:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 40%, transparent); }
 button.on { background: var(--accent-solid); color: #fff; border-color: transparent; box-shadow: 0 1px 2px rgba(0,0,0,.35); font-weight: 600; }
 button.on:hover { filter: brightness(1.12); background: var(--accent-solid); color: #fff; border-color: transparent; }
-#refresh, #notifyBtn { width: 36px; padding: 0; }   /* square icon button */
+#refresh, #notifyBtn, #toggle { width: 36px; padding: 0; }   /* square icon button */
 button svg, .ico { flex: none; }
+/* Kattintásra 360°-os forgás — folyamatjelzés, sikeres poll után áll meg (6.1). */
+#refresh.spinning svg { animation: refreshSpin var(--dur-slow) var(--ease-std); }
+@keyframes refreshSpin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { #refresh.spinning svg { animation: none; } }
 
-/* Segmented view switcher (Kanban / Swimlane / Feed / Compact) */
-.segmented { display: inline-flex; gap: 3px; padding: 3px; border-radius: var(--radius-md); background: var(--panel); border: 1px solid var(--border); height: 36px; }
-.segmented button { height: 100%; padding: 0 13px; border: none; background: transparent; border-radius: 7px; color: var(--muted); box-shadow: none; }
+/* Segmented view switcher (Kanban / Swimlane / Feed / Compact) — az aktív gomb alá csúszó
+   "pill" jelző (6.3, Linear-féle folytonossági minta) a háttérszín-váltás helyett; a gombok
+   geometriája nem változik, csak egy abszolút pozicionált elem mozog mögöttük. */
+.segmented { position: relative; display: inline-flex; gap: 3px; padding: 3px; border-radius: var(--radius-md); background: var(--panel); border: 1px solid var(--border); height: 36px; }
+.seg-pill { position: absolute; top: 3px; bottom: 3px; left: 3px; width: 0; border-radius: 7px; background: var(--accent-solid); box-shadow: 0 1px 2px rgba(0,0,0,.35); transition: transform var(--dur-base) var(--ease-std), width var(--dur-base) var(--ease-std); z-index: 0; pointer-events: none; }
+.segmented button { position: relative; z-index: 1; height: 100%; padding: 0 13px; border: none; background: transparent; border-radius: 7px; color: var(--muted); box-shadow: none; }
 .segmented button:hover { background: rgba(255,255,255,.05); color: var(--text); border: none; }
-.segmented button.on { background: var(--accent-solid); color: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.35); }
+.segmented button.on { background: transparent; color: #fff; box-shadow: none; }
+/* A "Compact" gomb a nézetváltóktól FÜGGETLEN, saját ki/be kapcsoló (mindkettő lehet .on
+   egyszerre) — ez NEM a csúszó pill-lel jelzett csoport tagja, saját tömör kiemelést kap. */
+.segmented button#compact.on { background: var(--accent-solid); color: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.35); }
+@media (prefers-reduced-motion: reduce) { .seg-pill { transition: none; } }
 
 .status { display: inline-flex; align-items: center; gap: 8px; padding: 5px 11px; border-radius: var(--radius-full); background: rgba(255,255,255,.04); border: 1px solid var(--border); font: 500 12px var(--mono); color: var(--muted); white-space: nowrap; }
-.dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); flex: none; }
-.dot.ok  { background: var(--ok);  animation: livepulse 2.4s infinite; }
+.dot { position: relative; width: 7px; height: 7px; border-radius: 50%; background: var(--muted); flex: none; }
+.dot.ok  { background: var(--ok); }
+/* Élő-jelző lüktetés: kizárólag transform/opacity (a "kőbe vésett szabály" — box-shadow-animáció tilos). */
+.dot.ok::after { content: ""; position: absolute; inset: -3px; border-radius: 50%; border: 1.5px solid var(--ok); opacity: .6; animation: livepulse 2.4s infinite; }
 .dot.err { background: var(--err); box-shadow: 0 0 0 3px color-mix(in srgb, var(--err) 25%, transparent); }
-.dot.idle { background: #d99a3f; }
-.pulse { animation: pulse .55s ease; }
+.dot.idle { background: var(--warn); }
+.pulse { animation: pulse var(--dur-base) var(--ease-out); }
 @keyframes pulse { 0%{transform:scale(.55);opacity:.4} 100%{transform:scale(1);opacity:1} }
-@keyframes livepulse { 0%{box-shadow:0 0 0 0 rgba(70,192,127,.45)} 70%{box-shadow:0 0 0 6px rgba(70,192,127,0)} 100%{box-shadow:0 0 0 0 rgba(70,192,127,0)} }
+@keyframes livepulse { 0% { transform: scale(.4); opacity: .55; } 70% { transform: scale(1.9); opacity: 0; } 100% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .dot.ok::after { animation: none; opacity: 0; } }
 
-.stats, .controls { display: flex; flex-wrap: wrap; align-items: center; gap: 9px 15px; padding: 10px 20px; background: rgba(15,17,21,.82); backdrop-filter: blur(10px); border-bottom: 1px solid var(--border-soft); }
-.stat { display: inline-flex; align-items: center; gap: 7px; font-size: 12px; font-weight: 500; color: var(--muted); }
-.stat b { color: var(--text-strong); font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; }
-.stat .swatch { width: 8px; height: 8px; border-radius: 3px; }
-.sep { width: 1px; align-self: center; height: 20px; background: rgba(255,255,255,.08); }
+.stats, .controls { display: flex; flex-wrap: wrap; align-items: center; gap: 9px 15px; padding: 10px 20px; background: rgba(15,17,21,.82); backdrop-filter: blur(10px); border-bottom: 1px solid var(--border-soft); min-height: 56px; }
+.stat { display: inline-flex; align-items: center; gap: 7px; font-size: var(--fs-sm); font-weight: 500; color: var(--muted); min-width: 4ch; }
+.stat b { color: var(--text-strong); font-size: var(--fs-xl); font-weight: 600; line-height: 1; min-width: 3ch; display: inline-block; text-align: right; }
+.stat .swatch { width: 8px; height: 8px; border-radius: 3px; flex: none; }
+.sep { width: 1px; align-self: center; height: 20px; background: rgba(255,255,255,.08); flex: none; }
 /* Distribution bar: each status as its own colored segment, proportionally (instead of "% done"). */
-.progress { flex: 1 1 160px; min-width: 130px; height: 8px; background: var(--track); border-radius: 4px; overflow: hidden; display: flex; gap: 2px; }
-.progress > i { display: block; height: 100%; }
-.progress-label { font: 600 12px var(--mono); color: var(--muted); white-space: nowrap; }
+.progress { position: relative; flex: 1 1 160px; min-width: 130px; height: 10px; background: var(--track); border-radius: 5px; overflow: hidden; }
+.progress > i { position: absolute; top: 0; bottom: 0; height: 100%; transition: width var(--dur-slow) var(--ease-std), left var(--dur-slow) var(--ease-std); }
+.progress-label { font: 600 12px var(--mono); color: var(--muted); white-space: nowrap; min-width: 6ch; }
 .lbl { font-size: 12px; font-weight: 500; color: var(--muted-2); }
-.ro { display: inline-flex; align-items: center; gap: 7px; font: 500 11.5px var(--font); color: #c9a463; padding: 5px 10px; border-radius: var(--radius-md); background: rgba(224,165,74,.08); border: 1px solid rgba(224,165,74,.2); margin-left: auto; }
+.ro { display: inline-flex; align-items: center; gap: 7px; font: 500 11.5px var(--font); color: var(--warn-text); padding: 5px 10px; border-radius: var(--radius-md); background: var(--warn-bg); border: 1px solid var(--warn-border); margin-left: auto; flex: none; }
+/* .ro az agents-head gombbal egy sorban, space-between-del jobbra igazítva (nem a .controls
+   részeként fut többé) — a gomb marad a nagy, teljes szélességű kattintható toggle-cél. */
+.agents-head-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding-right: 20px; }
+.agents-head-row button.agents-head { flex: 1 1 auto; }
 /* kv rows inside the modal (e.g. dependency-list label + links on one line). */
 .row { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
 
@@ -247,8 +327,10 @@ button.agents-head:hover { background: rgba(255,255,255,.03); border: none; colo
 .agents-head .count-pill { font: 600 11px var(--mono); padding: 1px 7px; border-radius: 999px; background: rgba(255,255,255,.06); color: var(--muted); }
 .agents-head .chev { display: grid; place-items: center; color: var(--muted-2); transition: transform .15s ease; }
 .agents-wrap.open .agents-head .chev { transform: rotate(180deg); }
-.agents { display: flex; flex-wrap: nowrap; align-items: center; gap: 10px; padding: 0 20px 12px; overflow-x: auto; }
-.agents-wrap:not(.open) .agents { display: none; }
+.agents { display: flex; flex-wrap: nowrap; align-items: center; gap: 10px; padding: 0 20px 12px; overflow-x: auto; overflow-y: hidden; height: auto; transition: height var(--dur-slow) var(--ease-std), padding var(--dur-slow) var(--ease-std); }
+/* interpolate-size: allow-keywords (progresszív feljavítás, 5.5) — height:auto↔0 animál a
+   támogató böngészőkben; ahol nincs, azonnal nyit/csuk (nem törik el semmit). */
+.agents-wrap:not(.open) .agents { height: 0; padding-top: 0; padding-bottom: 0; overflow: hidden; }
 
 /* Agent chip (filter + load bar): avatar + name/load bar, with a per-agent color. */
 .agent-chip { display: inline-flex; align-items: center; gap: 9px; min-width: 160px; padding: 7px 11px; border-radius: 10px; border: 1px solid var(--border); background: var(--panel); color: var(--muted); cursor: pointer; transition: background .12s ease, border-color .12s ease, color .12s ease; }
@@ -260,12 +342,12 @@ button.agents-head:hover { background: rgba(255,255,255,.03); border: none; colo
 .agent-chip .ac-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; font: 500 12px var(--mono); color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .agent-chip .ac-count { flex: none; font: 600 11px var(--mono); font-variant-numeric: tabular-nums; color: var(--muted); padding: 0; background: none; }
 .agent-chip .ac-bar { width: 100%; height: 3px; border-radius: 3px; background: rgba(255,255,255,.09); overflow: hidden; }
-.agent-chip .ac-bar > i { display: block; height: 100%; border-radius: 3px; transition: width .3s ease; }
+.agent-chip .ac-bar > i { display: block; height: 100%; border-radius: 3px; transition: width var(--dur-slow) var(--ease-std); }
 
-.board { display: flex; gap: 14px; padding: 16px 20px 18px; flex: 1 1 0; min-height: 0; align-items: stretch; overflow: auto; }
+.board { display: flex; gap: 14px; padding: 16px 20px 18px; flex: 1 1 0; min-height: 0; align-items: stretch; overflow: auto; scrollbar-gutter: stable; }
 .board.swim { flex-direction: column; overflow: hidden auto; align-items: stretch; }
 /* In Kanban mode every column is the same height; content scrolls within each column. */
-.board:not(.swim) .col-body { overflow-y: auto; min-height: 0; flex: 1 1 auto; }
+.board:not(.swim) .col-body { overflow-y: auto; min-height: 0; flex: 1 1 auto; scrollbar-gutter: stable; }
 /* The swim-board is a flex column; the lanes must NOT shrink (otherwise on overflow
    they get squeezed and .lane's overflow:hidden clips the content instead of scrolling). */
 .board.swim > .lane { flex: 0 0 auto; }
@@ -278,35 +360,81 @@ button.agents-head:hover { background: rgba(255,255,255,.03); border: none; colo
 .board.swim .col-head { margin: 0 2px 9px; }
 .board.swim .col-body { display: flex; flex-direction: column; gap: 9px; }
 
-.col { flex: 1 1 0; min-width: 260px; background: var(--panel); border: 1px solid var(--border-soft); border-radius: var(--radius-lg); padding: 2px 10px 12px; display: flex; flex-direction: column; transition: flex-basis .2s ease, min-width .2s ease; }
-.col.collapsed { flex: 0 0 46px; min-width: 0; }
-/* Data-driven: EMPTY Kanban columns shrink. (:has → modern browser) */
-.board:not(.swim) .col:not(.collapsed):has(.col-body > .empty) { flex: 0 1 176px; min-width: 156px; }
+.col { flex: 1 1 0; min-width: 260px; background: var(--panel); border: 1px solid var(--border-soft); border-top: 2px solid var(--border-soft); border-radius: var(--radius-lg); padding: 2px 10px 12px; display: flex; flex-direction: column; transition: flex-basis var(--dur-slow) var(--ease-std), min-width var(--dur-slow) var(--ease-std); }
+/* Kanban nézetben (nem swim) a 4 nem-Done oszlop MINDIG fix, egyenlő (1/4) szélességű —
+   üresen sem szűkül, és a Done összecsukása/kinyitása NEM tolja el őket (flex-growjuk 0,
+   nem reagálnak a Done sávjának méretváltozására). A Done a maradék helyet tölti ki
+   nyitva, összecsukva 46px-re zsugorodik — a felszabaduló hely egyszerűen üresen marad. */
+.board:not(.swim) > .col:not([data-col="done"]) { flex: 0 0 25%; min-width: 240px; }
+.board:not(.swim) > .col[data-col="done"] { flex: 1 1 0; min-width: 240px; }
+.col.collapsed, .board:not(.swim) > .col.collapsed { flex: 0 0 46px; min-width: 0; }
 .col-head { display: flex; align-items: center; gap: 9px; font: 600 12px var(--font); text-transform: uppercase; letter-spacing: .09em; margin: 13px 4px 11px; color: var(--muted); user-select: none; }
 .col-head .caret { font-size: 9px; color: var(--muted-2); }
 .col-head .swatch { width: 9px; height: 9px; border-radius: 3px; }
+.col-head .status-ico { display: inline-flex; flex: none; }
 .col-head .col-title { flex: 1 1 auto; }
 .col-head .count { margin-left: auto; background: rgba(255,255,255,.06); color: var(--muted); border-radius: var(--radius-full); padding: 2px 8px; font: 600 11px var(--mono); font-variant-numeric: tabular-nums; }
+.col-head .count.wip { background: var(--warn-bg); color: var(--warn-text); }
+/* Oszlop-összecsukó gomb (jelenleg csak a Done oszlopon): a col-head-del együtt forog
+   össze­csuk­va­; a gomb saját kattintható négyzete véletlen-kattintás ellen védett a
+   kártya-kattintástól (App.js data-col-toggle kezelő, e.stopPropagation()). */
+.col-collapse-btn {
+  flex: none; display: inline-flex; align-items: center; justify-content: center;
+  width: 20px; height: 20px; padding: 0; margin-left: 2px;
+  background: transparent; border: none; border-radius: var(--radius-sm); color: var(--muted-2); cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-std), color var(--dur-fast) var(--ease-std);
+}
+.col-collapse-btn:hover { background: rgba(255,255,255,.06); color: var(--text); }
 .col.collapsed { padding: 2px; }
 .col.collapsed .col-head { writing-mode: vertical-rl; transform: rotate(180deg); margin: 8px auto; height: 150px; gap: 8px; }
 .col.collapsed .col-head .count { margin: 0; }
 .col.collapsed .col-body { display: none; }
 
 .card {
-  position: relative; background: var(--card); border: 1px solid var(--border);
-  border-left: 3px solid var(--border); border-radius: 12px;
+  position: relative; background: color-mix(in oklch, var(--status-color, transparent) 3%, var(--card)); border: 1px solid var(--border);
+  border-left: 4px solid var(--status-color, var(--border)); border-radius: 12px;
   padding: 13px 14px 12px; margin-bottom: 9px; cursor: pointer;
   transition: background .12s ease, border-color .12s ease, transform .12s ease, box-shadow .15s ease;
 }
 .card:hover { background: var(--card-hover); border-color: var(--border-strong); transform: translateY(-1px); box-shadow: var(--shadow-lg); }
 .card:active { transform: translateY(0); }
-.card.changed { animation: flash 1.8s ease; }
-@keyframes flash { 0%,15% { box-shadow: inset 0 0 0 1.5px var(--accent), var(--shadow-lg); } 100% { box-shadow: none; } }
+/* "changed" jelzés (5.3, docs/REDESIGN-TERV.md): NEM badge (az megnyomná a kártyát — kicsúszás),
+   hanem (1) egy abszolút pozicionált sarok-pötty, ami nem érinti a geometriát, és (2) egy
+   ::after-en futó, kizárólag background-color-t animáló villanás — zéró layout, zéró paint-drága
+   box-shadow. A --flash-color inline style-ból jön (a diff típusából, ld. Motion.js). */
+.card.is-changed::after {
+  content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+  animation: cardFlash calc(var(--dur-flash-hold) + var(--dur-flash-fade)) var(--ease-std);
+}
+@keyframes cardFlash {
+  0%, 22% { background: color-mix(in oklch, var(--flash-color, var(--accent)) 16%, transparent); }
+  100%    { background: transparent; }
+}
+.change-dot {
+  position: absolute; top: 8px; right: 8px; width: 8px; height: 8px; border-radius: 50%;
+  background: var(--flash-color, var(--accent)); box-shadow: 0 0 0 2px var(--card); pointer-events: none;
+}
+.card.card-done .change-dot { box-shadow: 0 0 0 2px var(--surface-1); }
+@media (prefers-reduced-motion: reduce) { .card.is-changed::after { animation-duration: calc(var(--dur-flash-hold) + var(--dur-flash-fade)); } }
+
+/* ---- View Transitions (5.1): a js/Motion.js csomagolja a render()-t. A root-crossfade
+   ki van kapcsolva — különben minden pollnál az egész board áttűnne, ami villogásként
+   hatna; csak a Motion.js által megnevezett (ténylegesen változott) elemek morfolnak. ---- */
+::view-transition-old(root), ::view-transition-new(root) { animation: none; mix-blend-mode: normal; }
+::view-transition-group(*) { animation-duration: var(--dur-move); animation-timing-function: var(--ease-out); }
+::view-transition-group(board) { animation-duration: var(--dur-base); }
+/* Új elem (nincs old snapshot): belépő animáció. Eltűnő elem (nincs new snapshot): gyors kilépés. */
+::view-transition-new(*):only-child { animation: vtEnter var(--dur-base) var(--ease-out); }
+::view-transition-old(*):only-child { animation: vtExit 150ms var(--ease-in); }
+@keyframes vtEnter { from { opacity: 0; transform: translateY(-6px) scale(.98); } }
+@keyframes vtExit  { to   { opacity: 0; transform: scale(.98); } }
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*), ::view-transition-old(*), ::view-transition-new(*) { animation: none !important; }
+}
 .badges { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 9px; }
 .badge { display: inline-flex; align-items: center; gap: 4px; line-height: 1; font: 600 10px var(--mono); letter-spacing: .04em; padding: 4px 8px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--panel-2); color: var(--muted); }
 .badge.team { background: var(--accent-solid); color: #fff; border-color: transparent; }
 .badge.module { background: transparent; }
-.badge.ch { background: var(--accent-tint-bg); color: var(--accent-tint-text); border-color: transparent; }
 .badge.dep-active { background: var(--danger-bg); color: var(--danger-text); border-color: var(--danger-border); cursor: pointer; transition: filter .12s ease; }
 .badge.dep-done { opacity: .6; text-decoration: line-through; cursor: pointer; transition: filter .12s ease, opacity .12s ease; }
 .badge.dep-active:hover, .badge.dep-done:hover { filter: brightness(1.2); }
@@ -315,8 +443,8 @@ button.agents-head:hover { background: rgba(255,255,255,.03); border: none; colo
 .badge.rel { cursor: pointer; max-width: 190px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; transition: filter .12s ease; }
 .badge.rel:hover { filter: brightness(1.2); }
 .badge.rel-sum { background: var(--accent-tint-bg); color: var(--accent-tint-text); border-color: transparent; font-variant-numeric: tabular-nums; }
-.card h3 { margin: 0 0 7px; font: 600 14.5px/1.35 var(--font); letter-spacing: -.005em; color: #eceef1; }
-.card .desc { color: #8b929c; font: 400 12.5px/1.55 var(--font); margin: 0 0 12px; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.card h3 { margin: 0 0 7px; font: 600 14.5px/1.35 var(--font); letter-spacing: -.005em; color: var(--text-strong); }
+.card .desc { color: var(--muted); font: 400 12.5px/1.55 var(--font); margin: 0 0 12px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .card .meta { display: flex; flex-wrap: wrap; gap: 6px 8px; align-items: center; }
 .tag { display: inline-flex; align-items: center; gap: 5px; line-height: 1; font: 500 11px var(--mono); padding: 4px 8px; border-radius: var(--radius-sm); background: var(--panel-2); color: var(--muted); border: 1px solid var(--border); }
 .tag.agent { color: var(--text); font-weight: 600; }
@@ -331,19 +459,24 @@ button.agents-head:hover { background: rgba(255,255,255,.03); border: none; colo
 
 /* Slim row for done tasks (the mockup's "isDone" card variant): no description/badges,
    just a checkmark avatar + title + agent + time in one horizontal row. */
-.card.card-done { display: flex; align-items: center; gap: 11px; padding: 9px 12px; background: #161a20; border-left: 1px solid var(--border-soft); }
-.card.card-done:hover { background: #1a1f27; border-color: color-mix(in srgb, var(--done) 24%, var(--border)); transform: none; box-shadow: none; }
+.card.card-done { display: flex; align-items: center; gap: 11px; padding: 9px 12px; background: var(--surface-1); border-left: 1px solid var(--border-soft); }
+.card.card-done:hover { background: var(--surface-2); border-color: color-mix(in srgb, var(--done) 24%, var(--border)); transform: none; box-shadow: none; }
 .done-check { width: 24px; height: 24px; border-radius: 7px; display: grid; place-items: center; background: color-mix(in srgb, var(--done) 12%, transparent); border: 1px solid color-mix(in srgb, var(--done) 26%, transparent); color: var(--done); flex: none; }
+/* *→done: a pipa stroke-draw animációval rajzolódik ki (SVG pathLength-trükk — 5.2). */
+.done-check svg path { stroke-dasharray: 1; stroke-dashoffset: 0; }
+.card.just-done .done-check svg path { animation: checkDraw var(--dur-move) var(--ease-out) both; }
+@keyframes checkDraw { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
+@media (prefers-reduced-motion: reduce) { .card.just-done .done-check svg path { animation: none; } }
 .card-done-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
 .card-done-title { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .card-done-title .badges-inline { display: inline-flex; gap: 4px; flex: none; }
 .card-done-title .title-txt { font: 500 13px/1.3 var(--font); color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; }
 .card-done-meta { display: flex; align-items: center; gap: 7px; min-width: 0; font: 500 11px var(--mono); color: var(--muted-2); }
 .card-done-meta .who-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }
-.card-done-meta .dot-sep { width: 3px; height: 3px; border-radius: 50%; background: #454b55; flex: none; }
+.card-done-meta .dot-sep { width: 3px; height: 3px; border-radius: 50%; background: var(--border-strong); flex: none; }
 .board.compact .card.card-done { padding: 6px 10px; }
 
-.empty { color: #4b515c; font: 500 12px var(--mono); text-align: center; padding: 22px 6px; margin: 6px 0; border: 1px dashed rgba(255,255,255,.08); border-radius: 11px; }
+.empty { color: var(--muted-2); font: 500 12px var(--mono); text-align: center; padding: 22px 6px; margin: 6px 0; border: 1px dashed var(--border-soft); border-radius: 11px; }
 .banner { margin: 12px 20px 0; padding: 12px 16px; border-radius: var(--radius-md); background: var(--danger-bg); border: 1px solid var(--danger-border); color: var(--danger-text); font-size: 12.5px; display: none; }
 .banner.show { display: flex; align-items: flex-start; gap: 10px; }
 .banner .banner-text { flex: 1 1 auto; min-width: 0; }
@@ -362,11 +495,24 @@ button.agents-head:hover { background: rgba(255,255,255,.03); border: none; colo
 .banner-close:hover { background: color-mix(in srgb, var(--err) 20%, transparent); color: #fff; }
 code { background: var(--panel-2); border: 1px solid var(--border); padding: 2px 6px; border-radius: var(--radius-sm); font: 500 12px var(--mono); }
 
-/* Modal */
-.overlay { position: fixed; inset: 0; background: rgba(6,8,11,.66); backdrop-filter: blur(6px); display: none; align-items: flex-start; justify-content: center; padding: 48px 16px; z-index: 50; overflow-y: auto; }
-.overlay.show { display: flex; }
-.modal { background: var(--panel); border-radius: var(--radius-lg); box-shadow: var(--shadow-modal); width: min(700px, 100%); border: 1px solid var(--border); }
-.modal header { position: static; border-radius: var(--radius-lg) var(--radius-lg) 0 0; background: transparent; backdrop-filter: none; border-bottom: 1px solid var(--border-soft); }
+/* Modal — nyitás/zárás animáció (5.5): overlay opacity + .modal scale(.97→1)+fade.
+   @starting-style + allow-discrete: entry-animáció display:none-ből is, JS nélkül; olyan
+   böngészőben, ami ezt nem támogatja, egyszerűen animáció nélkül jelenik meg (progresszív
+   feljavítás, nem törik el semmit). */
+.overlay {
+  position: fixed; inset: 0; background: rgba(6,8,11,.66); backdrop-filter: blur(6px);
+  display: none; align-items: flex-start; justify-content: center; padding: 48px 16px; z-index: 50; overflow-y: auto;
+  opacity: 0; transition: opacity var(--dur-base) var(--ease-out), display var(--dur-base) allow-discrete;
+}
+.overlay.show { display: flex; opacity: 1; }
+@starting-style { .overlay.show { opacity: 0; } }
+.modal {
+  background: var(--panel); border-radius: var(--radius-lg); box-shadow: var(--shadow-modal); width: min(700px, 100%); border: 1px solid var(--border);
+  transform: scale(.97); opacity: 0; transition: transform var(--dur-slow) var(--ease-out), opacity var(--dur-slow) var(--ease-out);
+}
+.overlay.show .modal { transform: scale(1); opacity: 1; }
+@starting-style { .overlay.show .modal { transform: scale(.97); opacity: 0; } }
+.modal header { position: static; border-radius: var(--radius-lg) var(--radius-lg) 0 0; background: transparent; backdrop-filter: none; border-bottom: 1px solid var(--border-soft); border-top: 3px solid var(--status-color, transparent); }
 .modal h2 { font-size: 16px; font-weight: 600; margin: 0; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; color: var(--text-strong); }
 .modal .body { padding: 20px 22px; }
 .modal .close { margin-left: auto; }
@@ -377,7 +523,7 @@ code { background: var(--panel-2); border: 1px solid var(--border); padding: 2px
 .kv dd { margin: 0; word-break: break-word; }
 .copy-id { margin-left: 6px; padding: 1px 7px; font-size: 11px; line-height: 1.5; vertical-align: baseline; border-radius: var(--radius-full); }
 .copy-id.copied { background: var(--accent-solid); color: #fff; border-color: transparent; }
-.metrics { display: flex; flex-wrap: wrap; gap: 10px; }
+.metrics { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 16px; }
 .metric { background: var(--panel-2); border: 1px solid var(--border-soft); border-radius: 10px; padding: 10px 14px; font-size: 12.5px; }
 .metric b { display: block; font-size: 16px; font-variant-numeric: tabular-nums; }
 .deplinks { display: flex; flex-wrap: wrap; gap: 7px; }
@@ -420,8 +566,8 @@ ul.checklist { list-style: none; margin: 0 0 10px; padding: 0; display: flex; fl
 .act-btn { height: 32px; padding: 0 13px; font: 600 12px var(--font); }
 .act-btn.act-approve { background: color-mix(in srgb, var(--ok) 15%, var(--panel)); border-color: color-mix(in srgb, var(--ok) 45%, transparent); color: var(--ok); }
 .act-btn.act-approve:hover { background: color-mix(in srgb, var(--ok) 24%, var(--panel)); color: #fff; }
-.act-btn.act-changes { background: rgba(224,165,74,.1); border-color: rgba(224,165,74,.34); color: #d8a24a; }
-.act-btn.act-changes:hover { background: rgba(224,165,74,.2); color: #fff; }
+.act-btn.act-changes { background: var(--warn-bg); border-color: var(--warn-border); color: var(--warn-text); }
+.act-btn.act-changes:hover { background: color-mix(in oklch, var(--warn) 26%, var(--panel)); color: #fff; }
 .act-btn.act-block { background: var(--danger-bg); border-color: var(--danger-border); color: var(--danger-text); }
 .act-btn.act-block:hover { background: color-mix(in srgb, var(--err) 24%, var(--panel)); color: #fff; }
 .act-note { width: 100%; resize: vertical; min-height: 42px; padding: 8px 11px; font: 400 12.5px var(--font); line-height: 1.5; color: var(--text); background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius-sm); }
@@ -452,7 +598,7 @@ ul.notes > li { margin-bottom: 8px; }
 .note-item .n-preview { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }
 /* by + when right-aligned cluster (task.sh by/files feature: who wrote the note). */
 .note-item .n-meta { display: flex; align-items: baseline; gap: 8px; margin-left: auto; flex: none; }
-.note-item .n-when { font: 500 11.5px var(--mono); color: var(--muted-2); flex: none; }
+.note-item .n-when { font: 500 11.5px var(--mono); color: var(--muted); flex: none; }
 .note-item .n-by { flex: none; }
 .note-item .n-text { white-space: pre-wrap; line-height: 1.55; padding: 10px 12px; }
 /* Subordinate "Files" block within a note/history entry (task.sh files feature) — same
@@ -472,7 +618,7 @@ ul.notes > li { margin-bottom: 8px; }
 /* Extension (the counterpart of the NOTE_KIND_STEMS dictionary, see js/Utils.js) — based on real note prefixes. */
 .k-done     { background: color-mix(in srgb, var(--done) 22%, transparent); color: #5ee6a0; }
 .k-block    { background: var(--danger-bg); color: var(--danger-text); }
-.k-warn     { background: rgba(224,165,74,.18); color: #e9b866; }
+.k-warn     { background: var(--warn-bg); color: var(--warn-text); }
 .k-verify   { background: rgba(82,217,179,.14); color: #52d9b3; }
 .k-user     { background: rgba(226,115,155,.16); color: #f0a8c2; }
 .k-handoff  { background: rgba(139,143,240,.16); color: #b3b6f7; }
@@ -482,7 +628,7 @@ ul.notes > li { margin-bottom: 8px; }
    feature) must not get the timeline dot/border. */
 .timeline > li { position: relative; padding: 0 0 16px 22px; border-left: 2px solid var(--border); }
 .timeline > li:last-child { border-left-color: transparent; }
-.timeline > li::before { content: ""; position: absolute; left: -6px; top: 2px; width: 10px; height: 10px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 2px var(--panel); }
+.timeline > li::before { content: ""; position: absolute; left: -6px; top: 2px; width: 10px; height: 10px; border-radius: 50%; background: var(--status-color, var(--accent)); box-shadow: 0 0 0 2px var(--panel); }
 .timeline .when { font: 500 11.5px var(--mono); color: var(--muted-2); }
 .timeline .trans { font-size: 12.5px; margin: 2px 0; }
 .timeline .note2 { font-size: 12px; color: var(--muted); }
@@ -502,21 +648,112 @@ ul.notes > li { margin-bottom: 8px; }
 /* ---- #1 "Waiting on you" age badge (review): escalating emphasis with wait length ---- */
 .badge.await { border-color: transparent; }
 .badge.await-fresh { background: color-mix(in srgb, var(--review) 20%, transparent); color: #c79cf7; }
-.badge.await-warn  { background: rgba(224,166,63,.2); color: #e9b866; }
-.badge.await-stale { background: var(--danger-bg); color: var(--danger-text); border-color: var(--danger-border); animation: awaitPulse 2.4s ease-in-out infinite; }
-@keyframes awaitPulse { 0%,100% { box-shadow: 0 0 0 0 transparent; } 50% { box-shadow: 0 0 0 3px color-mix(in srgb, var(--err) 26%, transparent); } }
-
-/* ---- #5 Quick-filter chips (the .on state comes from the global button.on) ---- */
-button.qf { padding: 6px 11px; font-size: 12px; }
+.badge.await-warn  { background: color-mix(in oklch, var(--warn) 22%, transparent); color: var(--warn-text); }
+.badge.await-stale { position: relative; z-index: 0; background: var(--danger-bg); color: var(--danger-text); border-color: var(--danger-border); }
+/* Box-shadow-animáció helyett opacity-lüktetés egy ::after rétegen (kőbe vésett szabály: transform/opacity/background-color). */
+.badge.await-stale::after {
+  content: ""; position: absolute; inset: -3px; z-index: -1; border-radius: inherit;
+  background: var(--err); opacity: 0; pointer-events: none; animation: awaitPulse 2.4s ease-in-out infinite;
+}
+@keyframes awaitPulse { 0%, 100% { opacity: 0; } 50% { opacity: .24; } }
+@media (prefers-reduced-motion: reduce) { .badge.await-stale::after { animation: none; opacity: .18; } }
 
 /* ---- #2 Activity feed view ---- */
-.board.feed { flex-direction: column; overflow: hidden auto; align-items: stretch; gap: 10px; padding: 18px 20px 36px; }
+.board.feed { flex-direction: column; overflow: hidden auto; align-items: stretch; gap: 10px; padding: 18px 20px 36px; scrollbar-gutter: stable; }
 .board.feed { max-width: 1180px; margin: 0 auto; width: 100%; }
 .board.feed > .feed-item { flex: 0 0 auto; }
-.feed-item { position: relative; background: #13161c; border: 1px solid var(--border-soft); border-radius: 12px; padding: 13px 18px 14px; overflow: hidden; cursor: pointer; transition: border-color .12s ease, background .12s ease; }
-.feed-item:hover { border-color: var(--border-strong); background: #151920; }
+.feed-item { position: relative; background: var(--surface-1); border: 1px solid var(--border-soft); border-left: 3px solid var(--fi-color, var(--border-strong)); border-radius: 12px; padding: 13px 18px 14px 15px; overflow: hidden; cursor: pointer; transition: border-color var(--dur-fast) var(--ease-std), background var(--dur-fast) var(--ease-std); }
+.feed-item:hover { border-top-color: var(--border-strong); border-right-color: var(--border-strong); border-bottom-color: var(--border-strong); background: var(--surface-2); }
 .fi-top { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.fi-type { font: 600 10.5px var(--mono); letter-spacing: .09em; color: var(--muted-2); text-transform: uppercase; }
-.fi-task { font: 600 14px var(--font); letter-spacing: -.005em; color: #e9ebee; flex: 1; min-width: 180px; }
-.fi-when { margin-left: auto; font: 500 11.5px var(--mono); color: var(--muted-2); white-space: nowrap; }
-.fi-text { margin-top: 9px; font: 400 13px/1.6 var(--font); color: #8b929c; white-space: pre-wrap; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
+.fi-type { font: 600 10.5px var(--mono); letter-spacing: .09em; color: var(--muted); text-transform: uppercase; }
+.fi-task { font: 600 14px var(--font); letter-spacing: -.005em; color: var(--text-strong); flex: 1; min-width: 180px; }
+.fi-when { margin-left: auto; font: 500 11.5px var(--mono); color: var(--muted); white-space: nowrap; }
+.fi-text { margin-top: 9px; font: 400 13px/1.6 var(--font); color: var(--muted); white-space: pre-wrap; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
+
+/* ---- Archive view: closed/archived tasks grouped by day or module ---- */
+#sortGroup { display: inline-flex; align-items: center; gap: 9px 15px; }
+.board.archive { flex-direction: column; overflow: hidden auto; align-items: stretch; gap: 4px; padding: 16px 20px 36px; max-width: 1180px; margin: 0 auto; width: 100%; scrollbar-gutter: stable; }
+.arch-group { flex: 0 0 auto; border-bottom: 1px solid var(--border-soft); }
+.arch-group:last-child { border-bottom: none; }
+.arch-group-head { display: flex; align-items: center; gap: 9px; padding: 10px 4px; cursor: pointer; user-select: none; }
+.arch-group-head .chev { color: var(--muted-2); transition: transform .15s ease; flex: none; }
+.arch-group.collapsed .arch-group-head .chev { transform: rotate(-90deg); }
+.arch-group.collapsed .arch-group-body { height: 0; padding-bottom: 0; overflow: hidden; }
+.arch-day-date { font: 600 13px var(--mono); color: var(--text); }
+.arch-group-head .count { font: 600 11px var(--mono); color: var(--muted); background: rgba(255,255,255,.06); border-radius: var(--radius-full); padding: 2px 8px; font-variant-numeric: tabular-nums; }
+.arch-group-range { margin-left: auto; }
+.arch-day-bar { flex: 1 1 120px; max-width: 220px; height: 6px; border-radius: 3px; background: var(--track); overflow: hidden; }
+.arch-day-bar > i { display: block; height: 100%; border-radius: 3px; background: var(--done); transition: width var(--dur-slow) var(--ease-std); }
+.arch-group-body { display: flex; flex-direction: column; gap: 3px; padding-bottom: 6px; height: auto; overflow: hidden; transition: height var(--dur-slow) var(--ease-std), padding var(--dur-slow) var(--ease-std); }
+.arch-subgroup-head { display: flex; align-items: center; gap: 8px; padding: 8px 4px 4px 26px; }
+.arch-subgroup-head .count { font: 500 11px var(--mono); color: var(--muted-2); }
+.arch-row { display: flex; align-items: center; gap: 11px; padding: 7px 10px 7px 26px; border-radius: 8px; cursor: pointer; transition: background .12s ease; }
+.arch-row:hover { background: rgba(255,255,255,.035); }
+.arch-row-status { flex: none; display: grid; place-items: center; }
+.arch-row-status .done-check { width: 19px; height: 19px; }
+.arch-row-title { flex: 1 1 auto; min-width: 0; font: 500 13px/1.3 var(--font); color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.arch-row-meta { flex: none; display: flex; align-items: center; gap: 8px; font: 500 11px var(--mono); color: var(--muted); }
+.arch-row-meta .who-name { max-width: 130px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }
+.badge.arch-lead { background: transparent; border-color: transparent; color: var(--muted-2); padding: 0; }
+.board.archive.compact .arch-row-meta .who-name { display: none; }
+
+/* ---- Akadálymentesség: vizuálisan rejtett, de screen readernek elérhető tartalom (8. fejezet). ---- */
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+
+/* ---- Toast (5.5): ha a fül nincs fókuszban, egy semleges toast jelzi a frissülést —
+   5s auto-dismiss, egyszerre max. 1. A böngésző-notification logika (App.js) ettől független. ---- */
+.toast {
+  position: fixed; right: 20px; bottom: 20px; z-index: 60; max-width: 320px;
+  padding: 12px 16px; border-radius: var(--radius-md); background: var(--surface-4);
+  border: 1px solid var(--border-ui); box-shadow: var(--shadow-modal); color: var(--text);
+  font: 500 12.5px var(--font); line-height: 1.4; cursor: pointer;
+  opacity: 0; transform: translateY(8px); pointer-events: none;
+  transition: opacity var(--dur-base) var(--ease-out), transform var(--dur-base) var(--ease-out);
+}
+.toast.show { opacity: 1; transform: translateY(0); pointer-events: auto; }
+@media (prefers-reduced-motion: reduce) { .toast { transition: opacity var(--dur-base) linear; transform: none; } }
+
+/* ---- Skeleton (5.5): csak az ELSŐ betöltésre — poll-frissítésnél SOHA nincs loading-állapot. ---- */
+.skeleton-col .col-head .count { display: none; }
+.skeleton-card {
+  height: 92px; border-radius: 12px; margin-bottom: 9px;
+  background: linear-gradient(90deg, var(--surface-2) 25%, var(--surface-3) 37%, var(--surface-2) 63%);
+  background-size: 400% 100%; animation: skeletonShimmer 1.6s ease infinite;
+}
+@keyframes skeletonShimmer { 0% { background-position: 100% 0; } 100% { background-position: 0 0; } }
+@media (prefers-reduced-motion: reduce) { .skeleton-card { animation: none; opacity: .6; } }
+
+/* ---- Parancspaletta (6.8): ⌘K/Ctrl+K (elsődleges — a ⌘+Space-t a macOS a Spotlightnak
+   foglalja, böngészőbe el sem jut) vagy "/" (másodlagos) nyitja. Spotlight-anatómia:
+   a viewport tetejétől 18%-ra, a legmagasabb elevation-szinten (--surface-4), az összes
+   modalnál "fölötte". Az .overlay alap nyitás/zárás-animációját örökli (opacity+display). ---- */
+.pal-chip {
+  height: 26px; padding: 0 9px; font: 600 11px var(--mono); color: var(--muted-2);
+  background: var(--panel-2); border: 1px solid var(--border); border-radius: var(--radius-sm);
+  cursor: pointer; flex: none; transition: color var(--dur-fast) var(--ease-std), border-color var(--dur-fast) var(--ease-std);
+}
+.pal-chip:hover { color: var(--text); border-color: var(--border-strong); }
+.pal-overlay { align-items: flex-start; padding-top: 18vh; }
+.pal-panel {
+  width: min(600px, 100vw - 32px); background: var(--surface-4); border: 1px solid var(--border-ui);
+  border-radius: var(--radius-lg); box-shadow: var(--shadow-modal); overflow: hidden;
+  transform: scale(.98); opacity: 0; transition: transform var(--dur-base) var(--ease-out), opacity var(--dur-base) var(--ease-out);
+}
+.pal-overlay.show .pal-panel { transform: scale(1); opacity: 1; }
+@starting-style { .pal-overlay.show .pal-panel { transform: scale(.98); opacity: 0; } }
+.pal-input-row { display: flex; align-items: center; gap: 10px; height: 52px; padding: 0 16px; border-bottom: 1px solid var(--border-soft); color: var(--muted-2); flex: none; }
+.pal-input-row input { flex: 1 1 auto; min-width: 0; height: auto; border: none; background: transparent; padding: 0; color: var(--text); font: 500 16px var(--font); }
+.pal-input-row input:focus-visible { outline: none; box-shadow: none; }
+.pal-esc-chip { flex: none; font: 600 10px var(--mono); color: var(--muted-2); border: 1px solid var(--border-ui); border-radius: var(--radius-sm); padding: 2px 6px; }
+.pal-list { max-height: 400px; overflow-y: auto; padding: 6px; scrollbar-gutter: stable; }
+.pal-group-label { padding: 8px 10px 4px; font: 600 10.5px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted-2); }
+.pal-row { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: var(--radius-sm); cursor: pointer; color: var(--text); }
+.pal-row .pal-row-icon { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 16px; color: var(--muted); }
+.pal-row .pal-row-icon .dot { width: 8px; height: 8px; }
+.pal-row .pal-row-label { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 500 13px var(--font); }
+.pal-row .pal-row-label mark { background: color-mix(in oklch, var(--accent) 32%, transparent); color: var(--text-strong); border-radius: 2px; }
+.pal-row .pal-row-meta { flex: none; font: 500 11px var(--mono); color: var(--muted-2); max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pal-row.active { background: color-mix(in oklch, var(--accent) 16%, transparent); }
+.pal-empty { padding: 26px 10px; text-align: center; color: var(--muted-2); font: 500 12.5px var(--font); }
+.pal-footer { display: flex; gap: 16px; padding: 8px 14px; border-top: 1px solid var(--border-soft); font: 500 11px var(--mono); color: var(--muted-2); flex: none; }
+@media (prefers-reduced-motion: reduce) { .pal-panel { transition: opacity var(--dur-base) linear; transform: none; } }

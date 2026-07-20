@@ -34,6 +34,10 @@ browser board so a human can see it too.
 |---|---|
 | ![Kanban board, English](https://raw.githubusercontent.com/GeRiY/claude-task-manager/main/docs/screenshots/demo-en-board.png) | ![Task detail modal, English](https://raw.githubusercontent.com/GeRiY/claude-task-manager/main/docs/screenshots/demo-en-modal.png) |
 
+| Command palette (⌘K) | Archive view |
+|---|---|
+| ![Command palette overlay: fuzzy search over tickets plus a command catalog, opened with ⌘K](https://raw.githubusercontent.com/GeRiY/claude-task-manager/main/docs/screenshots/demo-en-palette.png) | ![Archive view: archived tickets in reverse-chronological order, grouped by day with cycle-time badges](https://raw.githubusercontent.com/GeRiY/claude-task-manager/main/docs/screenshots/demo-en-archive.png) |
+
 ## Install
 
 Requirements: `git`, `bash`, `jq`, `docker` (with the `docker compose` plugin) and `php`
@@ -159,7 +163,7 @@ would add network latency to a command called on every single task mutation.
 
 - The board's docker port is bound to `127.0.0.1` only — never reachable from the LAN.
 - The write endpoint (`api/index.php`) runs an explicit command allowlist; destructive
-  commands (`rm`, `restore`, `raw`, `archive`) are never exposed to the browser.
+  commands (`rm`, `restore`, `raw`) are never exposed to the browser.
 - Full posture and how to report a vulnerability: **[SECURITY.md](https://github.com/GeRiY/claude-task-manager/blob/main/SECURITY.md)**.
 
 ## Community & discussions

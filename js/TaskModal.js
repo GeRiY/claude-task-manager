@@ -20,20 +20,31 @@ export class TaskModal {
     if (!opts || !opts.writeEnabled) return "";
     const s = t.status;
     const btn = (act, label, cls = "") => `<button type="button" class="act-btn ${cls}" data-act="${act}">${label}</button>`;
+    // Archived tasks are read-only history: no status/priority/module/assignment changes,
+    // just the one way back in — task.sh reopen clears isArchived and reopens the task.
+    if (opts.archived) {
+      // Reopen: todo-ra állítja + valódi átmenet (history-bejegyzés). Unarchive: csak az
+      // isArchived flaget törli, a jelenlegi státuszt (pl. done) NEM változtatja meg.
+      return `<div class="actions" data-id="${Utils.esc(t.id)}"><div class="act-row act-primary">${btn("unarchive", I18n.t("modal.unarchive"))}${btn("reopen", I18n.t("modal.reopen"), "act-reopen")}</div></div>`;
+    }
     let primary = "";
     if (s === "review") {
       primary =
         btn("approve", I18n.t("modal.approve"), "act-approve") +
         btn("changes", I18n.t("modal.changes"), "act-changes") +
-        btn("block", I18n.t("modal.block"), "act-block");
+        btn("block", I18n.t("modal.block"), "act-block") +
+        btn("todo", I18n.t("modal.toTodo")) +
+        btn("archive", I18n.t("modal.archive"));
     } else if (s === "done") {
-      primary = btn("reopen", I18n.t("modal.reopen"), "act-reopen");
+      primary = btn("reopen", I18n.t("modal.reopen"), "act-reopen") + btn("todo", I18n.t("modal.toTodo")) + btn("archive", I18n.t("modal.archive"));
     } else {
       primary =
+        (s !== "todo" ? btn("todo", I18n.t("modal.toTodo")) : "") +
         (s !== "in_progress" ? btn("start", I18n.t("modal.start")) : "") +
         btn("review", I18n.t("modal.toReview")) +
         btn("done", I18n.t("modal.done"), "act-approve") +
-        btn("block", I18n.t("modal.block"), "act-block");
+        btn("block", I18n.t("modal.block"), "act-block") +
+        btn("archive", I18n.t("modal.archive"));
     }
     const prios = ["low", "normal", "high", "urgent"];
     const cur = t.priority || "normal";
@@ -69,6 +80,9 @@ export class TaskModal {
    */
   render(t, teamIndex, allTasks, opts = {}) {
     this.dom.mTitle.innerHTML = `${Utils.esc(t.title || t.id)} <span class="pill${Utils.pillClass(t.status)}" style="background:${COLOR[t.status] || "var(--muted)"}">${Utils.esc(t.status)}</span>`;
+    // Modal-fejléc: vékony, a jegy státuszszínével futó felső csík (6.7).
+    const modalEl = this.dom.overlay.querySelector(".modal");
+    if (modalEl) modalEl.style.setProperty("--status-color", COLOR[t.status] || "var(--border)");
     const notes = Utils.normDetailed(t.notes), c = Utils.cycle(t), team = Utils.parseTeam(t), deps = Utils.parseDeps(t);
     const blocks = []; allTasks.forEach(x => { const d = Utils.parseDeps(x); if (team != null && d.blockedBy.includes(team)) blocks.push(x); });
     const kv = [
@@ -187,7 +201,9 @@ export class TaskModal {
         // 'by' (task.sh by/files feature): only when there IS a value — old history entries
         // have no by field, and there the " · name" part simply drops out.
         const by = h.by ? ` · ${Utils.esc(h.by)}` : "";
-        return `<li><div class="when">${Utils.esc(Utils.absTime(h.at))} · ${Utils.esc(Utils.relTime(h.at))}${by}</div><div class="trans">${Utils.esc(h.type || "")} ${from}${to}</div>${h.note ? `<div class="note2">${Utils.esc(h.note)}</div>` : ""}${subFilesHTML(h.files)}</li>`;
+        // Timeline-pötty: a lezajlott átmenet cél-státuszának színe (eddig mind accent-kék volt) — 6.7.
+        const dotColor = COLOR[h.toStatus] || COLOR[h.fromStatus] || "var(--accent)";
+        return `<li style="--status-color:${dotColor}"><div class="when">${Utils.esc(Utils.absTime(h.at))} · ${Utils.esc(Utils.relTime(h.at))}${by}</div><div class="trans">${Utils.esc(h.type || "")} ${from}${to}</div>${h.note ? `<div class="note2">${Utils.esc(h.note)}</div>` : ""}${subFilesHTML(h.files)}</li>`;
       }).join("")}</ul>` : "");
   }
 

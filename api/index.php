@@ -23,7 +23,9 @@
  *
  * Security:
  *   - proc_open ARRAY form → no shell, no injection (no escaping needed on POSIX).
- *   - command allowlist: destructive commands (rm/restore/raw/archive) are NOT exposed.
+ *   - command allowlist: destructive commands (rm/restore/raw) are NOT exposed. archive/
+ *     unarchive ARE exposed (the modal's Archive/Unarchive buttons use them) — both are
+ *     non-destructive, reversible flag toggles (isArchived), unlike rm/restore/raw.
  *   - the real perimeter is docker-compose.yml's port binding (127.0.0.1:<port>:<port>) —
  *     the container is unreachable from anywhere but the host's own loopback. Requests that
  *     DO reach this script still show a private/link-local REMOTE_ADDR (the docker bridge's
@@ -59,10 +61,10 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST') {
     exit;
 }
 
-// task.sh commands exposed from the board. rm/restore/raw/archive are DELIBERATELY excluded.
+// task.sh commands exposed from the board. rm/restore/raw are DELIBERATELY excluded.
 const ALLOWED = [
     'status', 'note', 'priority', 'module', 'tag', 'assign', 'dep',
-    'status-many', 'reopen', 'add', 'checklist',
+    'status-many', 'reopen', 'add', 'checklist', 'archive', 'unarchive',
 ];
 
 const ALLOWED_LANGS = ['en', 'hu'];

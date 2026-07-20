@@ -36,6 +36,10 @@ is látja mindezt.
 |---|---|
 | ![Kanban board, magyar](https://raw.githubusercontent.com/GeRiY/claude-task-manager/main/docs/screenshots/demo-hu-board.png) | ![Task-részlet modal, magyar](https://raw.githubusercontent.com/GeRiY/claude-task-manager/main/docs/screenshots/demo-hu-modal.png) |
 
+| Parancspaletta (⌘K) | Archívum nézet |
+|---|---|
+| ![Parancspaletta: fuzzy keresés a feladatokon és parancskatalógus egy ⌘K-val megnyíló rétegben](https://raw.githubusercontent.com/GeRiY/claude-task-manager/main/docs/screenshots/demo-en-palette.png) | ![Archívum nézet: az archivált feladatok nap szerint csoportosítva, átbocsátás-sávval és átfutási idővel](https://raw.githubusercontent.com/GeRiY/claude-task-manager/main/docs/screenshots/demo-en-archive.png) |
+
 ## Telepítés
 
 Szükséges: `git`, `bash`, `jq`, `docker` (a `docker compose` pluginnal) és `php` — ezek
@@ -158,7 +162,7 @@ parancshoz, amit minden egyes task-mutációnál meghívnak.
 
 - **[docs/ARCHITECTURE.hu.md](https://github.com/GeRiY/claude-task-manager/blob/main/docs/ARCHITECTURE.hu.md)** — az egyetlen-író invariáns, a komponensek, a könyvtárszerkezet, a `.env` beállítások.
 - **[docs/COMMANDS.hu.md](https://github.com/GeRiY/claude-task-manager/blob/main/docs/COMMANDS.hu.md)** — a teljes `task.sh` parancs-referencia.
-- **[docs/BOARD.hu.md](https://github.com/GeRiY/claude-task-manager/blob/main/docs/BOARD.hu.md)** — a böngészős board: nézetmódok, szűrés, a task modal, mélylinkek.
+- **[docs/BOARD.hu.md](https://github.com/GeRiY/claude-task-manager/blob/main/docs/BOARD.hu.md)** — a böngészős board: nézetmódok (köztük az Archívum nézet), a ⌘K parancspaletta, szűrés, a task modal, mélylinkek.
 - **[docs/AGENTS.hu.md](https://github.com/GeRiY/claude-task-manager/blob/main/docs/AGENTS.hu.md)** — a teammate-modell teljes leírása.
 - **[CONTRIBUTING.hu.md](https://github.com/GeRiY/claude-task-manager/blob/main/CONTRIBUTING.hu.md)** — nincs build-lépés, a board helyi futtatása, a tükrözött fájlok szabálya, és a csak-angol konvenció.
 
@@ -166,7 +170,7 @@ parancshoz, amit minden egyes task-mutációnál meghívnak.
 
 - A board docker-portja kizárólag `127.0.0.1`-re van kötve — a LAN-ról sosem elérhető.
 - Az írás-endpoint (`api/index.php`) egy explicit parancs-allowlistet futtat; a
-  destruktív parancsok (`rm`, `restore`, `raw`, `archive`) sosincsenek kiengedve a
+  destruktív parancsok (`rm`, `restore`, `raw`) sosincsenek kiengedve a
   böngészőnek.
 - A teljes biztonsági helyzet és a sebezhetőség-bejelentés módja:
   **[SECURITY.hu.md](https://github.com/GeRiY/claude-task-manager/blob/main/SECURITY.hu.md)**.

@@ -5,6 +5,88 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.0] - 2026-07-20
+
+A front-end release: the board gets a ground-up visual redesign, a fourth **Archive**
+view, and a **⌘K command palette** — all served from the same static files, no CLI or
+data-format changes. `task.sh`, `ctm`, and `tasks.json` are untouched.
+
+### Added
+- **Command palette (⌘K / Ctrl+K).** A single overlay for finding anything on the board
+  and driving every board action from the keyboard — `js/CommandPalette.js`, wired in
+  `js/App.js`, markup in `index.html`. Open it with **⌘K/Ctrl+K**, with **`/`** (when the
+  focus is not in an input), or by clicking the new **`⌘K` chip** in the header; Escape
+  closes it. One field does **fuzzy search over tickets** (title, id, agent, module, note
+  text — `Utils.fuzzyScore`) *and* a **command catalog**, with results grouped under
+  Tickets / Commands / Recent. An empty field shows the last five things you opened
+  (`localStorage: tm.palRecent`); a leading `>` narrows to commands only. Arrow keys move,
+  **Enter** opens the task modal, **⌘Enter** scrolls to the card on the board and flashes
+  it. Every command maps to an existing action (view switch, compact mode, archive
+  grouping, HU/EN, pause/resume polling, refresh, open Context/Projects) plus the live
+  lists of projects, agents, and modules — so the palette adds reach, not new behavior.
+- **Archive view — a fourth board view.** A new button in the view switcher
+  (`#viewArchive`, `?view=archive`) surfaces the archived tickets that were previously
+  dropped from the board entirely, in reverse-chronological order — `js/BoardView.js`
+  (`archivedTasks`, `archiveHTML`, `archRow`, `renderArchiveStats`), with `closedAt`/
+  `dayKey` helpers in `js/Utils.js`. Two groupings via a segmented switch (`?agroup=day`
+  default, `?agroup=module`, remembered in `localStorage: tm.agroup`): **by day**, where
+  each day header carries a count and a proportional throughput mini-bar and the last three
+  days start open (collapsed state in `tm.archGroups`), and **by module**. Each archived
+  row shows the done-check (or a status pill for non-done archived items), title, agent
+  avatar, a **cycle-time badge** (`Utils.cycle().leadMs`) and a relative close time. The
+  `#stats` bar switches to archive metrics: total archived, closes-per-day average, average
+  lead time, and the count still open. Opening an archived ticket gives the modal a
+  read-only action row (**Unarchive** + **Reopen** only).
+- **Archive / Unarchive from the task modal.** Every status now offers an **Archive**
+  button; done/review also offer **To do**; archived tickets offer **Unarchive** and
+  **Reopen** — `js/TaskModal.js`, `js/App.js`. These call `task.sh archive`/`unarchive`,
+  which are now on the API allowlist (see below).
+- **Motion layer with View Transitions.** `js/Motion.js` wraps the board's full-innerHTML
+  render in the View Transitions API: on a poll refresh only the cards that actually changed
+  morph from their old position to the new one, view switches cross-fade within `#board`,
+  and stat numbers tween (300 ms, tabular-nums). **`prefers-reduced-motion` is now honored
+  end to end** — when it is set (or the browser lacks `startViewTransition`) the board
+  renders instantly with no motion, and the CSS carries a full `prefers-reduced-motion`
+  block as well. This is new: reduced-motion was previously not handled at all.
+- **Smaller UX touches:** a toast on background updates (only when the tab is unfocused,
+  auto-dismiss), a delayed skeleton on first load so a fast load never flashes it, an
+  `aria-live` region for screen-reader update announcements, and a collapse toggle on the
+  Done column (`localStorage: tm.collapsed`).
+
+### Changed
+- **Ground-up visual redesign of the board (`style.css`).** The token system moves to
+  OKLCH with a five-step elevation scale (`--surface-0…4`); the old token names
+  (`--bg/--panel/--card/--border…`) are kept as aliases so nothing breaks. The status
+  palette is recalibrated at a fixed lightness (Okabe–Ito-style, color-vision-deficiency
+  safe), contrast is enforced against WCAG targets (`--text-strong ~14:1`, `--text ~11:1`,
+  `--muted ~5.5:1`), and a typographic + 8px spacing scale replaces ad-hoc values. Columns
+  gain a status-colored top border and a status icon next to the swatch so they read
+  without relying on color alone, and the count pill flags a high WIP. Cards get a tinted
+  status stripe and elevation-based hover. All animations are rewritten to
+  transform/opacity/background only, and `scrollbar-gutter: stable` plus a floating
+  distribution bar remove the layout shift that refreshes used to cause.
+- **Header reorganized around the palette.** The header search field is gone, replaced by
+  the `⌘K` chip; the Projects and Context buttons move down into the controls row.
+
+### Removed
+- **The header search box (`#q`) and its `?q=` URL parameter.** Searching now goes through
+  the command palette; the old field pushed the card layout around and duplicated what the
+  palette does better.
+- **The three quick filters (Awaiting you / Active / Blocked) and the `?quick=`
+  parameter.** These are reachable as palette commands and board filters instead.
+- Old `?q=` / `?quick=` deep links no longer restore state; `?view=archive` and
+  `?agroup=<day|module>` are the new shareable parameters.
+
+### Fixed
+- **No more layout jump on refresh.** The height-growing "changed" badges are replaced by
+  an absolute corner dot plus a paint-only background flash, dynamic numbers use
+  `tabular-nums` with a fixed min-width, and `scrollbar-gutter: stable` keeps the gutter
+  reserved.
+- Collapsing the Done column no longer pushes the other columns around (the four non-Done
+  columns are a fixed 25% wide).
+- Paint-heavy `box-shadow` animations (status dot, awaiting-pulse, live pulse) are now
+  transform/opacity-based.
+
 ## [1.4.0] - 2026-07-17
 
 ### Added
@@ -504,4 +586,3 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [1.0.2]: https://github.com/GeRiY/claude-task-manager/releases/tag/v1.0.2
 [1.0.1]: https://github.com/GeRiY/claude-task-manager/releases/tag/v1.0.1
 [1.0.0]: https://github.com/GeRiY/claude-task-manager/releases/tag/v1.0.0
- 

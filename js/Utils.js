@@ -5,13 +5,21 @@ import { I18n } from "./i18n.js";
 // BoardView.js, TaskModal.js) — the --todo/--in_progress/... tokens are defined in
 // style.css's :root.
 export const COLUMNS = [
-  { key: "todo", label: "To do", color: "var(--todo)" },
-  { key: "in_progress", label: "In progress", color: "var(--in_progress)" },
-  { key: "blocked", label: "Blocked", color: "var(--blocked)" },
-  { key: "review", label: "Review", color: "var(--review)" },
-  { key: "done", label: "Done", color: "var(--done)" },
+  { key: "todo", label: "To do", color: "var(--todo)", icon: "statusTodo" },
+  { key: "in_progress", label: "In progress", color: "var(--in_progress)", icon: "statusInProgress" },
+  { key: "blocked", label: "Blocked", color: "var(--blocked)", icon: "block" },
+  { key: "review", label: "Review", color: "var(--review)", icon: "hourglass" },
+  { key: "done", label: "Done", color: "var(--done)", icon: "check" },
 ];
 export const COLOR = Object.fromEntries(COLUMNS.map(c => [c.key, c.color]));
+
+// Note-"kind" badge class -> reprezentatív szín (feed-item bal csík, 6.6).
+export const KIND_COLOR = {
+  "k-research": "#6fcdda", "k-plan": "var(--review)", "k-decision": "var(--in_progress)",
+  "k-impl": "var(--done)", "k-done": "var(--done)", "k-block": "var(--blocked)",
+  "k-warn": "var(--warn)", "k-verify": "#52d9b3", "k-user": "#f0a8c2",
+  "k-handoff": "#b3b6f7", "k-other": "var(--muted-2)",
+};
 
 // Inline SVG icons (from the "Redesign a dark mode" mockup). Inherit currentColor, so they
 // take on the parent's text color. The static header icons live in index.html; these are
@@ -26,8 +34,11 @@ export const ICONS = {
   pause: '<svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1"></rect><rect x="14" y="5" width="4" height="14" rx="1"></rect></svg>',
   play: '<svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"></path></svg>',
   bell: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.7 21a2 2 0 0 1-3.4 0"></path></svg>',
-  check: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.4 4.4L19 7.2"></path></svg>',
+  check: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path pathLength="1" d="M5 12.5l4.4 4.4L19 7.2"></path></svg>',
   chevron: '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"></path></svg>',
+  // Oszlopfej státuszikonok (6.4): a swatch mellett, hogy az oszlop szín NÉLKÜL is azonosítható legyen.
+  statusTodo: '<svg class="ico" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"></circle></svg>',
+  statusInProgress: '<svg class="ico" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"></circle><path d="M12 3a9 9 0 0 1 0 18z" fill="currentColor" stroke="none"></path></svg>',
 };
 
 // Which status pill needs dark (not white) text for contrast.
@@ -193,11 +204,57 @@ export class Utils {
     return since;
   }
 
+  /** When a task was closed, for the archive view's day grouping: the last history entry's
+   *  `toStatus === "done"` timestamp, falling back to lastActivityAt/updatedAt/createdAt for
+   *  archived tasks that never reached done (review/blocked archive). */
+  static closedAt(t) {
+    const h = Array.isArray(t.history) ? t.history.slice().sort((a, b) => new Date(a.at) - new Date(b.at)) : [];
+    let done = null;
+    for (const e of h) if (e.toStatus === "done") done = e.at;
+    return done || t.lastActivityAt || t.updatedAt || t.createdAt || null;
+  }
+
+  /** YYYY-MM-DD day key (local calendar day) for an ISO timestamp, "" if invalid. */
+  static dayKey(iso) {
+    const d = new Date(iso); if (isNaN(d)) return "";
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  }
+
   /** Wait-level (for the review "awaiting you" age badge escalation): fresh <1h, warn 1–4h, stale >4h. */
   static waitLevel(ms) {
     if (ms == null) return "fresh";
     const h = ms / 3600000;
     return h < 1 ? "fresh" : (h < 4 ? "warn" : "stale");
+  }
+
+  /**
+   * Subsequence-fuzzy pontozó (parancspaletta — docs/REDESIGN-TERV.md #6.8): a query
+   * karaktereinek sorban, de nem feltétlenül egymás mellett kell megjelenniük a szövegben.
+   * Szó-eleji és egymást követő találatok magasabb súlyt kapnak. Visszaadja a pontszámot és
+   * a találat-indexeket (a UI ezekkel emeli ki a találó karaktereket), vagy null-t, ha a
+   * query nem illeszkedik subsequence-ként.
+   */
+  static fuzzyScore(query, text) {
+    const q = String(query || "").toLowerCase();
+    if (!q) return { score: 0, matches: [] };
+    const t = String(text || "").toLowerCase();
+    let qi = 0, score = 0, consecutive = 0;
+    const matches = [];
+    for (let ti = 0; ti < t.length && qi < q.length; ti++) {
+      if (t[ti] !== q[qi]) { consecutive = 0; continue; }
+      const prev = t[ti - 1];
+      const wordStart = ti === 0 || prev === " " || prev === "-" || prev === "_" || prev === "/";
+      let bonus = 1;
+      if (wordStart) bonus += 3;
+      if (consecutive > 0) bonus += 2;
+      score += bonus;
+      consecutive++;
+      matches.push(ti);
+      qi++;
+    }
+    if (qi < q.length) return null;
+    score -= (t.length - matches.length) * 0.02;
+    return { score, matches };
   }
 
   /**

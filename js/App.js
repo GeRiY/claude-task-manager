@@ -9,6 +9,8 @@ import { ApiClient } from "./ApiClient.js";
 import { Utils } from "./Utils.js";
 import { ICONS } from "./Utils.js";
 import { I18n } from "./i18n.js";
+import { Motion } from "./Motion.js";
+import { CommandPalette } from "./CommandPalette.js";
 
 const el = id => document.getElementById(id);
 
@@ -22,13 +24,14 @@ export class App {
   constructor() {
     this.dom = {
       board: el("board"), stats: el("stats"), agents: el("agents"),
-      src: el("src"), q: el("q"), interval: el("interval"),
+      src: el("src"), interval: el("interval"),
       toggle: el("toggle"), refresh: el("refresh"), sort: el("sort"),
-      viewBoard: el("viewBoard"), viewSwim: el("viewSwim"), viewFeed: el("viewFeed"), compact: el("compact"),
-      qfReview: el("qfReview"), qfActive: el("qfActive"), qfBlocked: el("qfBlocked"), notifyBtn: el("notifyBtn"),
+      viewBoard: el("viewBoard"), viewSwim: el("viewSwim"), viewFeed: el("viewFeed"), viewArchive: el("viewArchive"), compact: el("compact"),
+      agroupSeg: el("agroupSeg"), agroupDay: el("agroupDay"), agroupModule: el("agroupModule"),
+      sortGroup: el("sortGroup"), notifyBtn: el("notifyBtn"),
       moduleMs: el("moduleMs"), moduleMsBtn: el("moduleMsBtn"), moduleMsLabel: el("moduleMsLabel"),
       moduleMsPop: el("moduleMsPop"), moduleMsSearch: el("moduleMsSearch"), moduleMsAll: el("moduleMsAll"), moduleMsList: el("moduleMsList"),
-      dot: el("dot"), statusText: el("statusText"), clock: el("clock"), banner: el("banner"),
+      dot: el("dot"), statusText: el("statusText"), clock: el("clock"), banner: el("banner"), logo: document.querySelector(".logo"), srLive: el("srLive"),
       overlay: el("overlay"), mTitle: el("mTitle"), mBody: el("mBody"), mClose: el("mClose"),
       ctxBtn: el("ctxBtn"), ctxOverlay: el("ctxOverlay"), ctxClose: el("ctxClose"), ctxBody: el("ctxBody"), ctxUpdated: el("ctxUpdated"),
       actor: el("actor"), actorList: el("actorList"),
@@ -36,6 +39,7 @@ export class App {
       agentsWrap: el("agentsWrap"), agentsHead: el("agentsHead"), agentsCount: el("agentsCount"),
       projectsBtn: el("projectsBtn"), projectsOverlay: el("projectsOverlay"), projectsClose: el("projectsClose"), projectsBody: el("projectsBody"),
       langBtn: el("langBtn"),
+      palette: el("palette"), palInput: el("palInput"), palList: el("palList"), palOpenBtn: el("palOpenBtn"),
     };
 
     // ---- State ----
@@ -48,8 +52,9 @@ export class App {
     this.moduleFilter = null;       // null = all modules; Set = modules to show
     this.moduleSearch = "";         // module-filter popover search text
     this.moduleMsOpen = false;      // module-filter popover open state
-    this.quickFilter = null;        // null | "review" | "active" | "blocked" (#5)
     this.collapsedCols = new Set();
+    this.agroup = "day";            // archive view grouping: "day" | "module"
+    this.collapsedArchGroups = new Set(JSON.parse(localStorage.getItem("tm.archGroups") || "[]"));   // archive view: day/module group keys with a FLIPPED default open/collapsed state
     this.openTaskId = null;
     this.pendingTask = null;
     this.notify = false;            // #3 browser notification on status change
@@ -65,33 +70,79 @@ export class App {
     this.boardView = new BoardView({ board: this.dom.board, stats: this.dom.stats, agents: this.dom.agents, agentsCount: this.dom.agentsCount });
     this.taskModal = new TaskModal({ overlay: this.dom.overlay, mTitle: this.dom.mTitle, mBody: this.dom.mBody, mClose: this.dom.mClose });
     this.contextPanel = new ContextPanel({ ctxBtn: this.dom.ctxBtn, ctxOverlay: this.dom.ctxOverlay, ctxClose: this.dom.ctxClose, ctxBody: this.dom.ctxBody, ctxUpdated: this.dom.ctxUpdated });
+    // Parancspaletta (⌘K — docs/REDESIGN-TERV.md #6.8): a jegy-katalógus a taskStore élő
+    // (nem archivált) jegyeiből épül, a parancskatalógus meglévő App-műveletekre képződik le.
+    this.commandPalette = new CommandPalette(
+      { overlay: this.dom.palette, input: this.dom.palInput, list: this.dom.palList },
+      {
+        getTasks: () => this.taskStore.currentTasks.filter(t => !t.isArchived),
+        getCommands: () => this.paletteCommands(),
+        onOpenTask: t => this.openModal(t.id),
+        onFocusTask: t => this.focusCardOnBoard(t),
+      }
+    );
+  }
+
+  // ⌘Enter a parancspalettában egy jegy-találaton: a boardra ugrik, és a kártyát megjelöli.
+  focusCardOnBoard(t) {
+    if (this.view !== "board") { this.view = "board"; UrlState.setView(this.view); this.setViewButtons(); this.renderAsViewSwitch(); this.syncURL(); }
+    requestAnimationFrame(() => {
+      const cardEl = this.dom.board.querySelector(`[data-id="${CSS.escape(t.id)}"]`);
+      if (!cardEl) return;
+      cardEl.scrollIntoView({ block: "center", behavior: this.commandPalette.reduced.matches ? "auto" : "smooth" });
+      cardEl.style.setProperty("--flash-color", "var(--accent)");
+      cardEl.classList.add("is-changed");
+      setTimeout(() => cardEl.classList.remove("is-changed"), 1200);
+    });
+  }
+
+  // A parancspaletta katalógusa: kizárólag meglévő App-műveletekre képződik le, új
+  // funkciót nem igényel — csak új felfedezési útvonalat a meglévőkhöz.
+  paletteCommands() {
+    const cmds = [];
+    const add = (id, label, run) => cmds.push({ id, label, run });
+    add("view-board", I18n.t("pal.cmd.viewBoard"), () => this.dom.viewBoard.click());
+    add("view-swim", I18n.t("pal.cmd.viewSwim"), () => this.dom.viewSwim.click());
+    add("view-feed", I18n.t("pal.cmd.viewFeed"), () => this.dom.viewFeed.click());
+    add("view-archive", I18n.t("pal.cmd.viewArchive"), () => this.dom.viewArchive.click());
+    add("toggle-compact", I18n.t(this.compact ? "pal.cmd.compactOff" : "pal.cmd.compactOn"), () => this.dom.compact.click());
+    add("agroup-day", I18n.t("pal.cmd.agroupDay"), () => { if (this.view !== "archive") this.dom.viewArchive.click(); this.dom.agroupDay.click(); });
+    add("agroup-module", I18n.t("pal.cmd.agroupModule"), () => { if (this.view !== "archive") this.dom.viewArchive.click(); this.dom.agroupModule.click(); });
+    add("toggle-lang", I18n.t(I18n.lang === "hu" ? "pal.cmd.langEn" : "pal.cmd.langHu"), () => this.toggleLang());
+    add("toggle-poll", I18n.t(this.running ? "pal.cmd.pollPause" : "pal.cmd.pollResume"), () => this.dom.toggle.click());
+    add("refresh-now", I18n.t("pal.cmd.refresh"), () => this.dom.refresh.click());
+    add("open-context", I18n.t("pal.cmd.context"), () => this.openCtx());
+    add("open-projects", I18n.t("pal.cmd.projects"), () => this.openProjects());
+    this.projectStore.projects.forEach(p => add("project-" + p.id, I18n.t("pal.cmd.project", { label: p.label }), () => { this.dom.srcProject.value = p.id; this.applyProject(p.id); }));
+    this.agentsList().forEach(a => add("agent-" + a, I18n.t("pal.cmd.agentFilter", { a }), () => { this.agentFilter = new Set([a]); this.render(); this.syncURL(); }));
+    this.modulesList().forEach(m => add("module-" + m, I18n.t("pal.cmd.moduleFilter", { m }), () => this.setModuleSelection(new Set([m]))));
+    return cmds;
   }
 
   // ---- URL / localStorage sync ----
   readState() {
     const s = UrlState.read();
-    this.dom.q.value = s.q;
     this.sort = s.sort;
     this.view = s.view;
     this.compact = s.compact;
     this.agentFilter = s.agentFilter;
     this.moduleFilter = s.moduleFilter;
-    this.quickFilter = s.quickFilter;
     this.pendingTask = s.pendingTask;
     this.collapsedCols = s.collapsedCols;
+    this.agroup = s.agroup;
     if (s.interval) this.dom.interval.value = s.interval;
     this.dom.actor.value = localStorage.getItem("tm.actor") || "human";   // defaults to human when empty
     this.dom.sort.value = this.sort;
     this.setViewButtons();
-    this.setQuickButtons();
+    this.setAgroupButtons();
     this.dom.compact.classList.toggle("on", this.compact);
     this.setAgentsOpen(this.agentsOpen);
   }
 
   syncURL() {
     UrlState.sync({
-      q: this.dom.q.value, agentFilter: this.agentFilter, moduleFilter: this.moduleFilter, quickFilter: this.quickFilter, sort: this.sort,
-      view: this.view, compact: this.compact, openTaskId: this.openTaskId, project: this.project, lang: I18n.lang,
+      agentFilter: this.agentFilter, moduleFilter: this.moduleFilter, sort: this.sort,
+      view: this.view, compact: this.compact, openTaskId: this.openTaskId, project: this.project, lang: I18n.lang, agroup: this.agroup,
     });
   }
 
@@ -99,6 +150,11 @@ export class App {
     this.dom.dot.className = "dot" + (state ? " " + state : "");
     this.dom.dot.classList.remove("pulse"); void this.dom.dot.offsetWidth; this.dom.dot.classList.add("pulse");
     this.dom.statusText.textContent = text;
+    // Equalizer-logó élő állapotjelzővé (6.1): pollingkor hullámzik, hibánál vörösre vált.
+    if (this.dom.logo) {
+      this.dom.logo.classList.toggle("live", state === "ok");
+      this.dom.logo.classList.toggle("err", state === "err");
+    }
   }
   // The error message is shown in its own context: inside the modal (modal-banner) if
   // one is open, otherwise in the main-page banner. This way it's never covered by the
@@ -125,19 +181,60 @@ export class App {
   clearModalBanner() {
     document.querySelectorAll(".modal-banner").forEach(b => { b.classList.remove("show"); b.innerHTML = ""; });
   }
+
+  // ---- Toast (5.5): semleges, nem-tolakodó frissülés-jelzés, ha a fül nincs fókuszban.
+  // 5s auto-dismiss, egyszerre max egy (az új lecseréli a régit). ----
+  showToast(text) {
+    clearTimeout(this._toastTimer);
+    let t = this._toastEl;
+    if (!t) {
+      t = document.createElement("div");
+      t.className = "toast";
+      t.addEventListener("click", () => t.classList.remove("show"));
+      document.body.appendChild(t);
+      this._toastEl = t;
+    }
+    t.textContent = text;
+    t.classList.add("show");
+    this._toastTimer = setTimeout(() => t.classList.remove("show"), 5000);
+  }
+
+  // ---- Skeleton (5.5): csak az ELSŐ betöltésre, 150ms késleltetéssel — gyors válasznál ki sem villan. ----
+  showSkeletonIfSlow() {
+    setTimeout(() => {
+      if (!this.taskStore.renderedOnce) {
+        this.dom.board.className = "board";
+        this.dom.board.innerHTML = this.boardView.skeletonHTML();
+      }
+    }, 150);
+  }
+  // Szegmentált nézetváltó (6.3): az aktív gomb alá csúszó "pill" jelző pozicionálása —
+  // a .seg-pill szélessége/eltolása az aktuális .on gomb geometriájához igazodik.
+  positionSegPill(container) {
+    if (!container) return;
+    const pill = container.querySelector(".seg-pill");
+    const active = container.querySelector("button.on");
+    if (!pill || !active) return;
+    pill.style.width = active.offsetWidth + "px";
+    pill.style.transform = `translateX(${active.offsetLeft}px)`;
+  }
   setViewButtons() {
+    const isArchive = this.view === "archive";
     this.dom.viewBoard.classList.toggle("on", this.view === "board");
     this.dom.viewSwim.classList.toggle("on", this.view === "swim");
     this.dom.viewFeed.classList.toggle("on", this.view === "feed");
+    this.dom.viewArchive.classList.toggle("on", isArchive);
+    // Archive-only grouping switch; sort (superseded by the archive's own day/closed-time
+    // ordering) doesn't apply in this view — see BoardView.archiveHTML.
+    this.dom.agroupSeg.hidden = !isArchive;
+    this.dom.sortGroup.hidden = isArchive;
+    this.positionSegPill(this.dom.viewBoard.closest(".segmented"));
+    if (isArchive) this.positionSegPill(this.dom.agroupSeg);
   }
-  setQuickButtons() {
-    this.dom.qfReview.classList.toggle("on", this.quickFilter === "review");
-    this.dom.qfActive.classList.toggle("on", this.quickFilter === "active");
-    this.dom.qfBlocked.classList.toggle("on", this.quickFilter === "blocked");
-  }
-  toggleQuick(v) {
-    this.quickFilter = this.quickFilter === v ? null : v;
-    this.setQuickButtons(); this.render(); this.syncURL();
+  setAgroupButtons() {
+    this.dom.agroupDay.classList.toggle("on", this.agroup !== "module");
+    this.dom.agroupModule.classList.toggle("on", this.agroup === "module");
+    this.positionSegPill(this.dom.agroupSeg);
   }
 
   // ---- Agent-load bar collapse/expand (the mockup's collapsible header) ----
@@ -198,18 +295,54 @@ export class App {
     document.querySelectorAll("[data-i18n]").forEach(e => { e.textContent = I18n.t(e.dataset.i18n); });
     document.querySelectorAll("[data-i18n-placeholder]").forEach(e => { e.placeholder = I18n.t(e.dataset.i18nPlaceholder); });
     document.querySelectorAll("[data-i18n-title]").forEach(e => { e.title = I18n.t(e.dataset.i18nTitle); });
-    this.dom.toggle.querySelector(".btxt").textContent = I18n.t(this.running ? "hd.pause" : "hd.resume");
+    // A poll indító/szüneteltető gomb ikon-only (nincs szöveges címke) — a title/aria-label
+    // hordozza az akadálymentes nevet, és a fenti általános data-i18n-title-hurok UTÁN kell
+    // futnia, mert az a statikus "hd.pause" alapértékre állítaná vissza a tényleges állapottól függetlenül.
+    this.dom.toggle.title = I18n.t(this.running ? "hd.pause" : "hd.resume");
+    this.dom.toggle.setAttribute("aria-label", this.dom.toggle.title);
   }
 
+  // Motion.transition()/transitionView() csomagolja be a teljes-innerHTML-cserés render()-t
+  // (docs/REDESIGN-TERV.md #5.1): poll-frissítésnél csak a ténylegesen változott kártyák
+  // morfolnak a régi helyükről az újra (changeInfo-vezérelt), nézetváltásnál (Kanban→Feed stb.)
+  // egy #board-ra korlátozott crossfade fut — ezt a this._viewSwitching jelzi a hívó oldalán.
   render() {
-    this.boardView.render(this.taskStore.currentTasks, {
-      q: this.dom.q.value, agentFilter: this.agentFilter, moduleFilter: this.moduleFilter, quickFilter: this.quickFilter, sort: this.sort,
-      view: this.view, compact: this.compact, collapsedCols: this.collapsedCols,
-      changeInfo: this.taskStore.changeInfo,
-    });
-    this.syncActorList();
-    this.renderModuleFilter();
-    this.tickRelTimes();
+    const doRender = () => {
+      this.boardView.render(this.taskStore.currentTasks, {
+        agentFilter: this.agentFilter, moduleFilter: this.moduleFilter, sort: this.sort,
+        view: this.view, compact: this.compact, collapsedCols: this.collapsedCols,
+        changeInfo: this.taskStore.changeInfo, agroup: this.agroup, collapsedArchGroups: this.collapsedArchGroups,
+      });
+      this.syncActorList();
+      this.renderModuleFilter();
+      this.tickRelTimes();
+    };
+    if (this._viewSwitching) Motion.transitionView(doRender, this.dom.board);
+    else Motion.transition(doRender, this.taskStore.changeInfo);
+  }
+
+  // View-szintű váltás (nézet/kompakt/csoportosítás gombok): a render()-t a #board-crossfade
+  // úttal futtatja, nem az egyenkénti kártya-morffal (ld. render() fenti kommentje).
+  renderAsViewSwitch() {
+    this._viewSwitching = true;
+    this.render();
+    this._viewSwitching = false;
+  }
+
+  // ---- Kanban-oszlop összecsukása (jelenleg csak a "done" oszlopra elérhető gomb — a
+  // sok kész kártya elrejtésére, csak a darabszám marad látható). ----
+  toggleColCollapse(key) {
+    this.collapsedCols.has(key) ? this.collapsedCols.delete(key) : this.collapsedCols.add(key);
+    UrlState.setCollapsed(this.collapsedCols);
+    this.render();
+  }
+
+  // ---- Archive view: day/module group collapse (localStorage tm.archGroups; see App
+  // constructor's comment on the "flipped default" semantics BoardView.archiveHTML uses). ----
+  toggleArchGroup(key) {
+    this.collapsedArchGroups.has(key) ? this.collapsedArchGroups.delete(key) : this.collapsedArchGroups.add(key);
+    localStorage.setItem("tm.archGroups", JSON.stringify([...this.collapsedArchGroups]));
+    this.render();
   }
 
   // #6 Live relative time: instead of a full re-render, only updates the .js-rel / .js-wait span text.
@@ -317,7 +450,7 @@ export class App {
     this.clearModalBanner();   // fresh task → don't leave a stale error in the modal
     this.openTaskId = id; this.syncURL();
     this.taskModal.render(t, this.boardView.teamIndex, this.taskStore.currentTasks, {
-      writeEnabled: this.api.enabled, agents: this.agentsList(), modules: this.modulesList(), project: this.project,
+      writeEnabled: this.api.enabled, agents: this.agentsList(), modules: this.modulesList(), project: this.project, archived: !!t.isArchived,
     });
     this.taskModal.show();
   }
@@ -369,9 +502,12 @@ export class App {
     switch (act) {
       case "approve": return this.runOps([{ cmd: "status", args: [id, "done"] }], I18n.t("app.approved"));
       case "done":    return this.runOps([{ cmd: "status", args: [id, "done"] }], I18n.t("app.toDone"));
+      case "todo":    return this.runOps([{ cmd: "status", args: [id, "todo"] }], I18n.t("app.toTodo"));
       case "start":   return this.runOps([{ cmd: "status", args: [id, "in_progress"] }], I18n.t("app.toInProgress"));
       case "review":  return this.runOps([{ cmd: "status", args: [id, "review"] }], I18n.t("app.toReview"));
       case "reopen":  return this.runOps([{ cmd: "reopen", args: [id] }], I18n.t("app.reopened"));
+      case "unarchive": return this.runOps([{ cmd: "unarchive", args: [id] }], I18n.t("app.unarchived"));
+      case "archive": return this.runOps([{ cmd: "archive", args: [id] }], I18n.t("app.archived"));
       case "changes":
         if (!note) { this.showBanner(I18n.t("app.needFeedback")); return; }
         // note → in_progress: the feedback goes into the affected agent's inbox (events.jsonl).
@@ -551,7 +687,15 @@ export class App {
 
       this.handleNotifications(result.tasks);   // #3 notification for new review/done transitions
       this.updateTitle(result.tasks);           // #3 title badge for tasks awaiting review
+      const wasRendered = this.taskStore.renderedOnce;
       if (result.shouldRender) { this.render(); this.taskStore.markRendered(); }
+      // Toast (5.5): csak ha MÁR volt render (nem az első betöltés) és az ablak nincs fókuszban —
+      // ilyenkor a felhasználó máshol van, a kártya-flash nem elég, de a böngésző-notification
+      // (App#notify) külön opt-in, azt nem helyettesíti.
+      if (wasRendered && !document.hasFocus() && result.changeCount) this.showToast(I18n.t("toast.updated", { n: result.changeCount }));
+      // A11y (8. fejezet): vizuálisan rejtett aria-live régió pollonként összegzi a változást —
+      // a toast akadálymentes párja, mozgás nélkül is minden állapotváltás észlelhető.
+      if (this.dom.srLive && result.changeCount) this.dom.srLive.textContent = I18n.t("a11y.updated", { n: result.changeCount });
       if (this.pendingTask) { this.openModal(this.pendingTask); this.pendingTask = null; }
 
       const n = result.tasks.length;
@@ -577,22 +721,27 @@ export class App {
     const dom = this.dom;
 
     dom.toggle.addEventListener("click", () => {
-      this.running = !this.running; dom.toggle.innerHTML = (this.running ? ICONS.pause : ICONS.play) + ` <span class="btxt">${I18n.t(this.running ? "hd.pause" : "hd.resume")}</span>`;
+      this.running = !this.running;
+      dom.toggle.innerHTML = this.running ? ICONS.pause : ICONS.play;
+      dom.toggle.title = I18n.t(this.running ? "hd.pause" : "hd.resume");
+      dom.toggle.setAttribute("aria-label", dom.toggle.title);
       if (this.running) { this.poll(); this.schedule(); } else { clearInterval(this.timer); this.timer = null; this.setStatus("idle", I18n.t("app.paused")); }
     });
-    dom.refresh.addEventListener("click", () => this.poll());
-    dom.q.addEventListener("input", () => { this.render(); this.syncURL(); });
+    dom.refresh.addEventListener("click", () => {
+      dom.refresh.classList.add("spinning");
+      Promise.resolve(this.poll()).finally(() => dom.refresh.classList.remove("spinning"));
+    });
     dom.srcProject.addEventListener("change", () => this.applyProject(dom.srcProject.value));
     dom.agentsHead.addEventListener("click", () => this.setAgentsOpen(!this.agentsOpen));
     dom.interval.addEventListener("change", () => { UrlState.setInterval(dom.interval.value); this.schedule(); });
     dom.sort.addEventListener("change", () => { this.sort = dom.sort.value; UrlState.setSort(this.sort); this.render(); this.syncURL(); });
-    dom.viewBoard.addEventListener("click", () => { this.view = "board"; UrlState.setView(this.view); this.setViewButtons(); this.render(); this.syncURL(); });
-    dom.viewSwim.addEventListener("click", () => { this.view = "swim"; UrlState.setView(this.view); this.setViewButtons(); this.render(); this.syncURL(); });
-    dom.viewFeed.addEventListener("click", () => { this.view = "feed"; UrlState.setView(this.view); this.setViewButtons(); this.render(); this.syncURL(); });
-    dom.compact.addEventListener("click", () => { this.compact = !this.compact; UrlState.setCompact(this.compact); dom.compact.classList.toggle("on", this.compact); this.render(); this.syncURL(); });
-    dom.qfReview.addEventListener("click", () => this.toggleQuick("review"));
-    dom.qfActive.addEventListener("click", () => this.toggleQuick("active"));
-    dom.qfBlocked.addEventListener("click", () => this.toggleQuick("blocked"));
+    dom.viewBoard.addEventListener("click", () => { this.view = "board"; UrlState.setView(this.view); this.setViewButtons(); this.renderAsViewSwitch(); this.syncURL(); });
+    dom.viewSwim.addEventListener("click", () => { this.view = "swim"; UrlState.setView(this.view); this.setViewButtons(); this.renderAsViewSwitch(); this.syncURL(); });
+    dom.viewFeed.addEventListener("click", () => { this.view = "feed"; UrlState.setView(this.view); this.setViewButtons(); this.renderAsViewSwitch(); this.syncURL(); });
+    dom.viewArchive.addEventListener("click", () => { this.view = "archive"; UrlState.setView(this.view); this.setViewButtons(); this.renderAsViewSwitch(); this.syncURL(); });
+    dom.agroupDay.addEventListener("click", () => { this.agroup = "day"; UrlState.setAgroup(this.agroup); this.setAgroupButtons(); this.renderAsViewSwitch(); this.syncURL(); });
+    dom.agroupModule.addEventListener("click", () => { this.agroup = "module"; UrlState.setAgroup(this.agroup); this.setAgroupButtons(); this.renderAsViewSwitch(); this.syncURL(); });
+    dom.compact.addEventListener("click", () => { this.compact = !this.compact; UrlState.setCompact(this.compact); dom.compact.classList.toggle("on", this.compact); this.renderAsViewSwitch(); this.syncURL(); });
     // Module filter popover: button, search, "all", individual checkboxes + outside-click/Escape.
     dom.moduleMsBtn.addEventListener("click", () => this.toggleModulePop());
     dom.moduleMsSearch.addEventListener("input", () => { this.moduleSearch = dom.moduleMsSearch.value; this.renderModuleFilter(); });
@@ -635,9 +784,15 @@ export class App {
       // Structured relationship badge (dependsOn/blocks) → open the related task.
       const rel = e.target.closest(".badge.rel");
       if (rel && rel.dataset.task) { e.stopPropagation(); this.openModal(rel.dataset.task); return; }
-      // Clicking a column header does NOT collapse the column (per user request).
+      // A col-head egésze nem csuk össze (per korábbi felhasználói kérés) — csak a dedikált
+      // .col-collapse-btn nyíl teszi, hogy ne csukódjon véletlenül oszlop kártyára kattintáskor.
+      const colToggle = e.target.closest(".col-collapse-btn");
+      if (colToggle && colToggle.dataset.colToggle) { e.stopPropagation(); this.toggleColCollapse(colToggle.dataset.colToggle); return; }
       if (e.target.closest(".col-head")) return;
+      const ag = e.target.closest(".arch-group-head");
+      if (ag && ag.dataset.group) { this.toggleArchGroup(ag.dataset.group); return; }
       const fi = e.target.closest(".feed-item"); if (fi) { this.openModal(fi.dataset.id); return; }
+      const ar = e.target.closest(".arch-row"); if (ar) { this.openModal(ar.dataset.id); return; }
       const c = e.target.closest(".card"); if (c) this.openModal(c.dataset.id);
     });
     dom.mBody.addEventListener("click", e => {
@@ -672,7 +827,20 @@ export class App {
     dom.ctxBtn.addEventListener("click", () => this.openCtx());
     dom.ctxClose.addEventListener("click", () => this.closeCtx());
     dom.ctxOverlay.addEventListener("click", e => { if (e.target === dom.ctxOverlay) this.closeCtx(); });
-    document.addEventListener("keydown", e => { if (e.key === "Escape") { this.closeModal(); this.closeCtx(); this.closeProjects(); } });
+    document.addEventListener("keydown", e => { if (e.key === "Escape") { this.closeModal(); this.closeCtx(); this.closeProjects(); this.commandPalette.close(); } });
+
+    // Parancspaletta (6.8): ⌘K/Ctrl+K elsődleges trigger (a ⌘+Space-t a macOS a Spotlightnak
+    // foglalja, böngészőbe el sem jut), "/" másodlagos — csak ha a fókusz nem beviteli mezőben áll.
+    dom.palOpenBtn.addEventListener("click", () => this.commandPalette.open());
+    document.addEventListener("keydown", e => {
+      const mod = e.metaKey || e.ctrlKey;
+      if (mod && (e.key === "k" || e.key === "K")) { e.preventDefault(); this.commandPalette.toggle(); return; }
+      if (e.key === "/" && !this.commandPalette.isOpen) {
+        const ae = document.activeElement;
+        const inField = ae && (/^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName) || ae.isContentEditable);
+        if (!inField) { e.preventDefault(); this.commandPalette.open(); }
+      }
+    });
 
     // Auto-pause in a background tab
     document.addEventListener("visibilitychange", () => {
@@ -694,6 +862,7 @@ export class App {
     this.readState();
     this.bindEvents();
     if (this.projectStore.projects.length) {
+      this.showSkeletonIfSlow();
       this.poll();
       this.schedule();
     } else {
